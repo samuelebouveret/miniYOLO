@@ -1,23 +1,12 @@
 from keras import Model
-from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
-
-
-# x = keras.layers.Flatten()(x)
-# x = keras.layers.Dense(256, activation="relu")(x)
-# print(x.count_params())
-
-
-# output_ly = keras.layers.Dense((S * S * (B * 5 + C)), activation="linear")(x)
-
-# NAH
-# output_ly = keras.layers.Conv2D(filters=(B * 5 + C), kernel_size=1)(x)
-# output_ly = keras.layers.Reshape(target_shape=(4, 4, 11))(output_ly)
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Resizing, Rescaling
 
 
 class MiniYOLO(Model):
-    def __init__(self):
+    def __init__(self, h=88, w=88):
         super().__init__()
-
+        self.resize = Resizing(height=h, width=w)
+        self.rescale = Rescaling(1.0 / 255)
         self.conv1 = Conv2D(16, (3, 3), activation="relu", padding="same")
         self.conv2 = Conv2D(16, (3, 3), activation="relu", padding="same")
         self.pool1 = MaxPooling2D(pool_size=(2, 2), strides=2)
@@ -41,11 +30,18 @@ class MiniYOLO(Model):
         self.flatten = Flatten()
         self.dense = Dense(256, activation="relu")
 
-        # CONSIDER A 1x1 CONV2D instead of this (uses less resources, see YOLOv2+ implementations) -- TODO
+        # TODO -- CONSIDER A 1x1 CONV2D instead of this (uses less resources, see YOLOv2+ implementations)
         # x = keras.layers.Conv2D(filters=256, kernel_size=1)(x)
 
+        # TODO --IMPLEMENT correct output configuration for YOLO model
+        # output_ly = keras.layers.Dense((S * S * (B * 5 + C)), activation="linear")(x)
+        # output_ly = keras.layers.Conv2D(filters=(B * 5 + C), kernel_size=1)(x)
+        # output_ly = keras.layers.Reshape(target_shape=(4, 4, 11))(output_ly)
+
     def call(self, inputs):
-        x = self.conv1(inputs)
+        x = self.resize(inputs)
+        x = self.rescale(x)
+        x = self.conv1(x)
         x = self.conv2(x)
         x = self.pool1(x)
 
