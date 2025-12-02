@@ -7,7 +7,7 @@ import tensorflow_datasets as tfds
 import tensorflow as tf
 
 from keras.layers import Input
-from model import MiniYOLO
+from model import MiniYOLO, miniYOLO_optimizer
 
 
 # WORKFLOW:
@@ -32,6 +32,10 @@ BATCH_SIZE = 32
 B = 2
 S = 4
 C = 20
+
+# Optimizer configs
+LEARNING_RATE = 0.01
+MOMENTUM = 0.9
 
 # Training configs
 EPOCH_NUM = 10
@@ -90,12 +94,14 @@ print(f"Batches per epoch: {n_batches}")
 input_layer = Input(shape=(244, 244, 3))
 model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1])
 output = model(input_layer)
-print(output.shape)
 model.summary()
 
 # 4. MODEL TRAIN
+
 model.compile(
-    optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"]
+    optimizer=miniYOLO_optimizer(LEARNING_RATE, MOMENTUM),
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"],
 )
 model.fit(train_ds, validation_data=validation_ds, epochs=EPOCH_NUM)
 

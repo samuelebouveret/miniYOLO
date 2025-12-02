@@ -1,5 +1,6 @@
 from keras import Model
 from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Resizing, Rescaling
+from keras.optimizers import SGD
 
 
 class MiniYOLO(Model):
@@ -63,3 +64,7 @@ class MiniYOLO(Model):
 
         x = self.flatten(x)
         return self.dense(x)
+
+
+def miniYOLO_optimizer(lr=0.01, mo=0.9):
+    return SGD(learning_rate=lr, momentum=mo)
