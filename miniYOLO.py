@@ -100,7 +100,7 @@ model.summary()
 # 4. MODEL TRAIN
 
 model.compile(
-    optimizer=miniYOLO_optimizer(LEARNING_RATE, MOMENTUM),
+    optimizer=miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY),
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"],
 )
