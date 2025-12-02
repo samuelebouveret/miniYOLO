@@ -6,13 +6,13 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow_datasets as tfds
 import tensorflow as tf
 
-from keras.layers import Input, Resizing, Rescaling
+from keras.layers import Input
 from model import MiniYOLO
 
 
 # WORKFLOW:
 # 1. DATASET IMPORT: See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
-# 2. PREPROCESS: tf.resize vs Keras model Resizing layer
+# 2. DATASET PREPROCESSING: keeps useful tensors from tf dataset
 # 3. MODEL INITIALIZATION: configurate inside MiniYOLO class
 # 4. MODEL TRAIN the model: TODO
 # 5. MODEL SAVE the model: TODO
@@ -27,7 +27,6 @@ DATA_DIR = "./data"
 MODEL_DIR = "./model-saves"
 
 # Model configs
-PREPROCESS_IN_MODEL = False
 IMG_SIZE = (244, 244)
 BATCH_SIZE = 32
 B = 2
@@ -35,7 +34,7 @@ S = 4
 C = 20
 
 # Training configs
-EPOCH_NUM = 1
+EPOCH_NUM = 10
 
 
 # FUNCTIONS
@@ -61,39 +60,37 @@ train_ds, validation_ds = tfds.load(
     data_dir=DATA_DIR,
 )
 
+# TODO -- Remove (needed for Pylance only)
+train_ds: tf.data.Dataset
+validation_ds: tf.data.Dataset
+
+# 2. DATASET PREPROCESSING
+
+train_ds = train_ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+validation_ds = validation_ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
 
-# 2. PREPROCESSING:
-# PREPROCESS_IN_MODEL is True ->  preprocessing is part of the model with a resize and rescale layer
-# PREPROCESS_IN_MODEL is False -> preprocessing is done on the dataset
-
-# INPUT layer
-input_ly = Input(shape=(244, 244, 3))
-
-# if PREPROCESS_IN_MODEL:
-#     print("Creating Keras Reisizing and Rescaling layer for preprocessing any inputs.")
-#     x = Resizing(height=IMG_SIZE[0], width=IMG_SIZE[1])(input_ly)
-#     x = Rescaling(1.0 / 255)(x)
-# else:
-#     print("Tensorflow preprocessing the training and validation ds. No Keras layers")
-#     train_ds = train_ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
-#     validation_ds = validation_ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+# TODO -- REMOVE
+# it = iter(train_ds)
+# print(next(it))
 
 # TODO -- Overwrite batch size since model.fit batches before training -- Either remove or change batch/shuffle size here
 train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 validation_ds = validation_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
 
 # Calculate batches before training
 n_batches = tf.data.experimental.cardinality(train_ds).numpy()
 print(f"Epochs: {EPOCH_NUM}")
 print(f"Batches per epoch: {n_batches}")
 
-# 3. Model initialization
+# 3. MODEL INITIALIZATION
+input_layer = Input(shape=(244, 244, 3))
 model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1])
-output = model(input_ly)
+output = model(input_layer)
+print(output.shape)
 model.summary()
 
 # 4. MODEL TRAIN
@@ -103,5 +100,5 @@ model.compile(
 model.fit(train_ds, validation_data=validation_ds, epochs=EPOCH_NUM)
 
 # 5. MODEL SAVE
-model_path = os.path.join(MODEL_DIR, "yolov1_test_with_reshaperesize.keras")
+model_path = os.path.join(MODEL_DIR, "yolov2_test_with_reshaperesize.keras")
 model.save(model_path)
