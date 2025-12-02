@@ -36,6 +36,7 @@ C = 20
 # Optimizer configs
 LEARNING_RATE = 0.01
 MOMENTUM = 0.9
+WEIGHT_DECAY = 0.005
 
 # Training configs
 EPOCH_NUM = 10

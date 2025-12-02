@@ -66,5 +66,5 @@ class MiniYOLO(Model):
         return self.dense(x)
 
 
-def miniYOLO_optimizer(lr=0.01, mo=0.9):
-    return SGD(learning_rate=lr, momentum=mo)
+def miniYOLO_optimizer(lr=0.01, mo=0.9, wd=0.005):
+    return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
