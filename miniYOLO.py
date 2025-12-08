@@ -7,13 +7,12 @@ import tensorflow_datasets as tfds
 import tensorflow as tf
 
 from keras.layers import Input
-from model import MiniYOLO, miniYOLO_optimizer
+from model import MiniYOLO, miniYOLO_optimizer, prepare_input
 
 # NEXT STEPS:
-# CORRECT INPUT FOR BBOX INFERENCE
 # LOSS AND METRICS FUNCTIONS
 # IUO FUNCTIONS
-
+# ADD IMAGE AUGMENTATION LAYERS
 
 # WORKFLOW:
 # 1. DATASET IMPORT: See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
@@ -46,18 +45,6 @@ WEIGHT_DECAY = 0.0005
 # Training configs
 EPOCH_NUM = 10
 
-
-# FUNCTIONS
-def preprocess(example):
-    image = example["image"]
-    image = tf.image.resize(image, IMG_SIZE)
-    image = tf.cast(image, tf.float32) / 255.0
-
-    # TODO -- Pick the first label if multiple objects exist -- change this based on how many class we want
-    label = example["objects"]["label"][0]
-    return image, label
-
-
 # 1. DATASET IMPORT
 
 # VOC2007 Dowload and assignes data
@@ -76,8 +63,8 @@ validation_ds: tf.data.Dataset
 
 # 2. DATASET PREPROCESSING
 
-train_ds = train_ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
-validation_ds = validation_ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+train_ds = train_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
+validation_ds = validation_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
 
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")

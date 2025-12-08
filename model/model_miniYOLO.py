@@ -9,6 +9,7 @@ from keras.layers import (
     LeakyReLU,
 )
 from keras.optimizers import SGD
+from tensorflow import cast, float32
 
 
 class MiniYOLO(Model):
@@ -79,3 +80,12 @@ class MiniYOLO(Model):
 
 def miniYOLO_optimizer(lr, mo, wd):
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
+
+
+def prepare_input(data):
+    image = data["image"]
+    image = cast(image, float32) / 255.0
+
+    # TODO -- Pick the first label if multiple objects exist -- change this based on how many class we want
+    label = data["objects"]["label"][0]
+    return image, label
