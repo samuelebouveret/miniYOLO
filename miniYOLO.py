@@ -9,6 +9,11 @@ import tensorflow as tf
 from keras.layers import Input
 from model import MiniYOLO, miniYOLO_optimizer
 
+# NEXT STEPS:
+# CORRECT INPUT FOR BBOX INFERENCE
+# LOSS AND METRICS FUNCTIONS
+# IUO FUNCTIONS
+
 
 # WORKFLOW:
 # 1. DATASET IMPORT: See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
@@ -36,7 +41,7 @@ C = 20
 # Optimizer configs
 LEARNING_RATE = 0.01
 MOMENTUM = 0.9
-WEIGHT_DECAY = 0.005
+WEIGHT_DECAY = 0.0005
 
 # Training configs
 EPOCH_NUM = 10
@@ -59,8 +64,8 @@ def preprocess(example):
 train_ds, validation_ds = tfds.load(
     "voc",
     split=[
-        "train[:80%]+test[:80%]+validation[:80%]",
-        "train[80%:90%]+test[80%:90%]+validation[80%:90%]",
+        "train[:90%]+test[:90%]+validation[:90%]",
+        "train[90%:]+test[90%:]+validation[90%:]",
     ],
     data_dir=DATA_DIR,
 )
@@ -92,7 +97,7 @@ print(f"Epochs: {EPOCH_NUM}")
 print(f"Batches per epoch: {n_batches}")
 
 # 3. MODEL INITIALIZATION
-input_layer = Input(shape=(244, 244, 3))
+input_layer = Input(shape=(None, None, 3))
 model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1])
 output = model(input_layer)
 model.summary()
