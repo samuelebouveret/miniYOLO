@@ -7,7 +7,7 @@ import tensorflow_datasets as tfds
 import tensorflow as tf
 
 from keras.layers import Input
-from model import MiniYOLO, miniYOLO_optimizer, prepare_input
+from model import MiniYOLO, miniYOLO_optimizer, prepare_input, create_saving_callback
 
 # NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS
@@ -27,9 +27,11 @@ from model import MiniYOLO, miniYOLO_optimizer, prepare_input
 # SETTINGS
 
 # Generics
-# TODO Implement directory initialization (if not exist etc.) and implement model versioning, training saves backups etc
 DATA_DIR = "./data"
-MODEL_DIR = "./model-saves"
+SAVE_DIR = "./model-saves"
+
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(SAVE_DIR, exist_ok=True)
 
 # Model configs
 IMG_SIZE = (244, 244)
@@ -100,8 +102,9 @@ model.compile(
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"],
 )
-model.fit(train_ds, validation_data=validation_ds, epochs=EPOCH_NUM)
-
-# 5. MODEL SAVE
-model_path = os.path.join(MODEL_DIR, "yolov2_test_with_reshaperesize.keras")
-model.save(model_path)
+model.fit(
+    train_ds,
+    validation_data=validation_ds,
+    epochs=EPOCH_NUM,
+    callbacks=create_saving_callback(SAVE_DIR),
+)

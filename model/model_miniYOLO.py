@@ -8,7 +8,10 @@ from keras.layers import (
     Rescaling,
     LeakyReLU,
 )
+
+from os.path import join
 from keras.optimizers import SGD
+from keras.callbacks import ModelCheckpoint
 from tensorflow import cast, float32
 from tensorflow.python.ops.image_ops_impl import resize_images_v2 as resize
 
@@ -95,6 +98,11 @@ def prepare_input(data):
     label = data["objects"]["label"][0]
 
     return image, label
+
+
+def create_saving_callback(dir_path):
+    path = join(dir_path, "trained_model-{epoch:02d}-{loss:.3f}.keras")
+    return ModelCheckpoint(filepath=path, monitor="loss", save_best_only=True)
 
 
 # Chait
