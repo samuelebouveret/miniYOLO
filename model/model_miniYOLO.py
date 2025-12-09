@@ -10,6 +10,9 @@ from keras.layers import (
 )
 from keras.optimizers import SGD
 from tensorflow import cast, float32
+from tensorflow.python.ops.image_ops_impl import resize_images_v2 as resize
+
+import tensorflow as tf
 
 
 class MiniYOLO(Model):
@@ -84,8 +87,18 @@ def miniYOLO_optimizer(lr, mo, wd):
 
 def prepare_input(data):
     image = data["image"]
+    image = resize(image, (244, 244))
     image = cast(image, float32) / 255.0
-
-    # TODO -- Pick the first label if multiple objects exist -- change this based on how many class we want
+    label = [0, 0, 0]
+    label = tf.convert_to_tensor(label)
+    print(label)
     label = data["objects"]["label"][0]
+
     return image, label
+
+
+# Chait
+#     # TODO -- Pick the first label if multiple objects exist -- change this based on how many class we want
+#     # Only pick CHAIR[9] PERSON[15] CAR[7] FROM DATASET
+#     # Returns a (3,) Tensor with
+#     return image, label, box

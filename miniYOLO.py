@@ -11,6 +11,7 @@ from model import MiniYOLO, miniYOLO_optimizer, prepare_input
 
 # NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS
+# ONLY CHAIR[9] PERSON[15] CAR[7] FROM DATASET
 # IUO FUNCTIONS
 # ADD IMAGE AUGMENTATION LAYERS
 
@@ -66,6 +67,9 @@ validation_ds: tf.data.Dataset
 train_ds = train_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
 validation_ds = validation_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
 
+# for ex in train_ds:
+#     print(train_ds)
+
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
@@ -87,7 +91,7 @@ print(f"Batches per epoch: {n_batches}")
 input_layer = Input(shape=(None, None, 3))
 model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1])
 output = model(input_layer)
-model.summary()
+model.summary(expand_nested=True)
 
 # 4. MODEL TRAIN
 
