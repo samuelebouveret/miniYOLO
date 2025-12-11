@@ -7,6 +7,7 @@ from keras.layers import (
     Resizing,
     Rescaling,
     LeakyReLU,
+    Reshape,
 )
 
 from os.path import join
@@ -16,12 +17,14 @@ from tensorflow import cast, float32
 from tensorflow.python.ops.image_ops_impl import resize_images_v2 as resize
 
 import tensorflow as tf
+import xml.etree.ElementTree as ET
 
 
 class MiniYOLO(Model):
-    def __init__(self, h=88, w=88):
+    def __init__(self, h=88, w=88, S=2, B=2, C=3):
         super().__init__()
         # TODO -- Maybe add param leaky
+        output_filters = B * 5 + C
         leaky_layer = LeakyReLU(0.1)
         self.resize = Resizing(height=h, width=w)
         self.rescale = Rescaling(1.0 / 255)
@@ -45,18 +48,8 @@ class MiniYOLO(Model):
         self.conv10 = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")
         self.pool5 = MaxPooling2D(pool_size=(2, 2), strides=2)
 
-        self.flatten = Flatten()
-        self.dense = Dense(256, activation=leaky_layer)
-
-        # TODO -- CONSIDER A 1x1 CONV2D instead of this (uses less resources, see YOLOv2+ implementations)
-        # x = keras.layers.Conv2D(filters=256, kernel_size=1)(x)
-
-        # TODO --IMPLEMENT correct output configuration for YOLO model
-        # output_ly = keras.layers.Dense((S * S * (B * 5 + C)), activation="linear")(x)
-        # output_ly = keras.layers.Conv2D(filters=(B * 5 + C), kernel_size=1)(x)
-        # output_ly = keras.layers.Reshape(target_shape=(4, 4, 11))(output_ly)
-
-        # TODO -- check if resizing is working with any input size, after dataset is batched
+        self.convoutput = Conv2D(output_filters, 1, padding="same")
+        self.reshape = Reshape((S, S, output_filters))
 
     def call(self, inputs):
         x = self.resize(inputs)
@@ -80,22 +73,64 @@ class MiniYOLO(Model):
         x = self.conv10(x)
         x = self.pool5(x)
 
-        x = self.flatten(x)
-        return self.dense(x)
+        x = self.convoutput(x)
+        return self.reshape(x)
 
 
 def miniYOLO_optimizer(lr, mo, wd):
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
 
-def prepare_input(data):
-    image = data["image"]
-    image = resize(image, (244, 244))
-    image = tf.cast(image, tf.float32) / 255.0
+def parse_dataset_xml(xml_path):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
 
-    label = data["objects"]["label"]
-    bbox = data["objects"]["bbox"]
-    return image, label, bbox
+    image_width = int(root.find("size/width").text)
+    image_height = int(root.find("size/width").text)
+
+    labels = []
+    bboxes = []
+
+    for obj in root.findall("object"):
+        name = obj.find("name").text
+
+        # convert class names to integer ids (example)
+        class_id = {"car": 0, "person": 1, "chair": 2}.get(name, -1)
+
+        if class_id == -1:
+            continue
+
+        bbox = obj.find("bndbox")
+        xmin = float(bbox.find("xmin").text) / image_width
+        ymin = float(bbox.find("ymin").text) / image_height
+        xmax = float(bbox.find("xmax").text) / image_width
+        ymax = float(bbox.find("ymax").text) / image_height
+
+        labels.append(class_id)
+        bboxes.append([xmin, ymin, xmax, ymax])
+
+    return labels, bboxes
+
+
+def load_example(image_path, xml_path):
+    # --- load & preprocess image ---
+    img = tf.io.read_file(image_path)
+    img = tf.image.decode_jpeg(img, channels=3)
+    img = tf.image.resize(img, (244, 244))
+    img = tf.cast(img, tf.float32) / 255.0
+
+    # --- parse XML through py_function ---
+    labels, bboxes = tf.py_function(
+        lambda x: parse_dataset_xml(x.numpy().decode()),
+        inp=[xml_path],
+        Tout=[tf.int32, tf.float32],
+    )
+
+    # shapes unknown → fix them
+    labels.set_shape([None])
+    bboxes.set_shape([None, 4])
+
+    return img, labels, bboxes
 
 
 def miniYOLO_saving_callback(dir_path):

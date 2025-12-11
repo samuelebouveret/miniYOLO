@@ -1,4 +1,5 @@
 import os
+import glob
 
 # Removes tf logging
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -7,7 +8,7 @@ import tensorflow_datasets as tfds
 import tensorflow as tf
 
 from keras.layers import Input
-from model import MiniYOLO, miniYOLO_optimizer, prepare_input, miniYOLO_saving_callback
+from model import MiniYOLO, miniYOLO_optimizer, load_example, miniYOLO_saving_callback
 
 # NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS
@@ -27,11 +28,16 @@ from model import MiniYOLO, miniYOLO_optimizer, prepare_input, miniYOLO_saving_c
 # SETTINGS
 
 # Generics
+# tfds dataset -- not useful anymore?
 DATA_DIR = "./data"
+DATA_DIR_IMAGES = "./data-temp/images"
+DATA_DIR_ANNOTATIONS = "./data-temp/annotations"
 SAVE_DIR = "./model-saves"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(SAVE_DIR, exist_ok=True)
+
+TRAIN_VAL_RATIO = 0.9
 
 # Model configs
 IMG_SIZE = (244, 244)
@@ -46,35 +52,29 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 
 # Training configs
-EPOCH_NUM = 10
+EPOCH_NUM = 1
 
 # 1. DATASET IMPORT
+image_files = sorted(glob.glob(os.path.join(DATA_DIR_IMAGES, "*.jpg")))
+xml_files = [
+    f.replace(DATA_DIR_IMAGES, DATA_DIR_ANNOTATIONS).replace(".jpg", ".xml")
+    for f in image_files
+]
 
-# VOC2007 Dowload and assignes data
-train_ds, validation_ds = tfds.load(
-    "voc",
-    split=[
-        "train[:90%]+test[:90%]+validation[:90%]",
-        "train[90%:]+test[90%:]+validation[90%:]",
-    ],
-    data_dir=DATA_DIR,
-)
-
-# TODO -- Remove (needed for Pylance only)
-train_ds: tf.data.Dataset
-validation_ds: tf.data.Dataset
+dataset = tf.data.Dataset.from_tensor_slices((image_files, xml_files))
 
 # 2. DATASET PREPROCESSING
-train_ds = train_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
-validation_ds = validation_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
+dataset = dataset.map(load_example, num_parallel_calls=tf.data.AUTOTUNE)
+
+ds_size = dataset.cardinality().numpy()
+train_size = int(ds_size * TRAIN_VAL_RATIO)
+
+train_ds = dataset.take(train_size)
+validation_ds = dataset.skip(train_size)
 
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
-
-# TODO -- REMOVE
-# it = iter(train_ds)
-# print(next(it))
 
 # TODO -- Overwrite batch size since model.fit batches before training -- Either remove or change batch/shuffle size here
 train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
