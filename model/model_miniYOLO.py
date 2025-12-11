@@ -18,6 +18,7 @@ from tensorflow.python.ops.image_ops_impl import resize_images_v2 as resize
 
 import tensorflow as tf
 import xml.etree.ElementTree as ET
+import numpy as np
 
 
 class MiniYOLO(Model):
@@ -49,7 +50,7 @@ class MiniYOLO(Model):
         self.pool5 = MaxPooling2D(pool_size=(2, 2), strides=2)
 
         self.convoutput = Conv2D(output_filters, 1, padding="same")
-        self.reshape = Reshape((S, S, output_filters))
+        # self.reshape = Reshape((S, S, output_filters))
 
     def call(self, inputs):
         x = self.resize(inputs)
@@ -74,13 +75,14 @@ class MiniYOLO(Model):
         x = self.pool5(x)
 
         x = self.convoutput(x)
-        return self.reshape(x)
+        return x
 
 
 def miniYOLO_optimizer(lr, mo, wd):
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
 
+# TODO -- We dont want hardcoded classes here
 def parse_dataset_xml(xml_path):
     tree = ET.parse(xml_path)
     root = tree.getroot()
@@ -107,9 +109,6 @@ def parse_dataset_xml(xml_path):
             labels.append(class_id)
             bboxes.append([xmin, ymin, xmax, ymax])
 
-    # Ensure output is numpy arrays, even if empty
-    import numpy as np
-
     if len(labels) == 0:
         labels = np.zeros((0,), dtype=np.int32)
         bboxes = np.zeros((0, 4), dtype=np.float32)
@@ -120,6 +119,7 @@ def parse_dataset_xml(xml_path):
     return labels, bboxes
 
 
+# TODO -- We dont want hardcoded max_obj here
 def load_example(image_path, xml_path):
     import tensorflow as tf
 

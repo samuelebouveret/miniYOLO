@@ -40,8 +40,7 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 TRAIN_VAL_RATIO = 0.9
 
 # Model configs
-IMG_SIZE = (244, 244)
-BATCH_SIZE = 32
+IMG_SIZE = (88, 88)
 B = 2
 S = 4
 C = 3
@@ -53,6 +52,7 @@ WEIGHT_DECAY = 0.0005
 
 # Training configs
 EPOCH_NUM = 1
+BATCH_SIZE = 32
 
 # 1. DATASET IMPORT
 image_files = sorted(glob.glob(os.path.join(DATA_DIR_IMAGES, "*.jpg")))
@@ -72,13 +72,6 @@ train_size = int(ds_size * TRAIN_VAL_RATIO)
 train_ds = dataset.take(train_size)
 validation_ds = dataset.skip(train_size)
 
-
-for img, labels, bboxes in dataset.take(5):
-    print("Image:", img.shape)
-    print("Labels:", labels)
-    print("BBoxes:", bboxes)
-    print("///////////////////////////////")
-
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
@@ -96,7 +89,7 @@ print(f"Batches per epoch: {n_batches}")
 input_layer = Input(shape=(None, None, 3))
 model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1], S, B, C)
 output = model(input_layer)
-model.summary(expand_nested=True)
+model.summary()
 
 # 4. MODEL COMPILATION
 model.compile(
