@@ -97,38 +97,64 @@ def parse_dataset_xml(xml_path):
         # convert class names to integer ids (example)
         class_id = {"car": 0, "person": 1, "chair": 2}.get(name, -1)
 
-        if class_id == -1:
-            continue
+        if class_id != -1:
+            bbox = obj.find("bndbox")
+            xmin = float(bbox.find("xmin").text) / image_width
+            ymin = float(bbox.find("ymin").text) / image_height
+            xmax = float(bbox.find("xmax").text) / image_width
+            ymax = float(bbox.find("ymax").text) / image_height
 
-        bbox = obj.find("bndbox")
-        xmin = float(bbox.find("xmin").text) / image_width
-        ymin = float(bbox.find("ymin").text) / image_height
-        xmax = float(bbox.find("xmax").text) / image_width
-        ymax = float(bbox.find("ymax").text) / image_height
+            labels.append(class_id)
+            bboxes.append([xmin, ymin, xmax, ymax])
 
-        labels.append(class_id)
-        bboxes.append([xmin, ymin, xmax, ymax])
+    # Ensure output is numpy arrays, even if empty
+    import numpy as np
+
+    if len(labels) == 0:
+        labels = np.zeros((0,), dtype=np.int32)
+        bboxes = np.zeros((0, 4), dtype=np.float32)
+    else:
+        labels = np.array(labels, dtype=np.int32)
+        bboxes = np.array(bboxes, dtype=np.float32)
 
     return labels, bboxes
 
 
 def load_example(image_path, xml_path):
+    import tensorflow as tf
+
+    MAX_OBJECTS = 5
+
     # --- load & preprocess image ---
     img = tf.io.read_file(image_path)
     img = tf.image.decode_jpeg(img, channels=3)
     img = tf.image.resize(img, (244, 244))
     img = tf.cast(img, tf.float32) / 255.0
 
-    # --- parse XML through py_function ---
     labels, bboxes = tf.py_function(
-        lambda x: parse_dataset_xml(x.numpy().decode()),
+        func=lambda x: parse_dataset_xml(x.numpy().decode()),
         inp=[xml_path],
         Tout=[tf.int32, tf.float32],
     )
 
-    # shapes unknown → fix them
     labels.set_shape([None])
     bboxes.set_shape([None, 4])
+
+    # --- clip number of objects to MAX_OBJECTS ---
+    num_objs = tf.shape(labels)[0]
+    num_objs = tf.minimum(num_objs, MAX_OBJECTS)
+
+    # --- take only first num_objs objects ---
+    labels = labels[:num_objs]
+    bboxes = bboxes[:num_objs, :]
+
+    # --- pad to MAX_OBJECTS ---
+    labels = tf.pad(labels, [[0, MAX_OBJECTS - num_objs]])
+    bboxes = tf.pad(bboxes, [[0, MAX_OBJECTS - num_objs], [0, 0]])
+
+    # cast to proper dtype
+    labels = tf.cast(labels, tf.int32)
+    bboxes = tf.cast(bboxes, tf.float32)
 
     return img, labels, bboxes
 

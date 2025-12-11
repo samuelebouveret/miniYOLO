@@ -44,7 +44,7 @@ IMG_SIZE = (244, 244)
 BATCH_SIZE = 32
 B = 2
 S = 4
-C = 20
+C = 3
 
 # Optimizer configs
 LEARNING_RATE = 0.01
@@ -72,6 +72,13 @@ train_size = int(ds_size * TRAIN_VAL_RATIO)
 train_ds = dataset.take(train_size)
 validation_ds = dataset.skip(train_size)
 
+
+for img, labels, bboxes in dataset.take(5):
+    print("Image:", img.shape)
+    print("Labels:", labels)
+    print("BBoxes:", bboxes)
+    print("///////////////////////////////")
+
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
@@ -87,7 +94,7 @@ print(f"Batches per epoch: {n_batches}")
 
 # 3. MODEL INITIALIZATION
 input_layer = Input(shape=(None, None, 3))
-model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1])
+model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1], S, B, C)
 output = model(input_layer)
 model.summary(expand_nested=True)
 
