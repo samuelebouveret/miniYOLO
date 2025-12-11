@@ -91,22 +91,13 @@ def miniYOLO_optimizer(lr, mo, wd):
 def prepare_input(data):
     image = data["image"]
     image = resize(image, (244, 244))
-    image = cast(image, float32) / 255.0
-    label = [0, 0, 0]
-    label = tf.convert_to_tensor(label)
-    print(label)
-    label = data["objects"]["label"][0]
+    image = tf.cast(image, tf.float32) / 255.0
 
-    return image, label
+    label = data["objects"]["label"]
+    bbox = data["objects"]["bbox"]
+    return image, label, bbox
 
 
-def create_saving_callback(dir_path):
+def miniYOLO_saving_callback(dir_path):
     path = join(dir_path, "trained_model-{epoch:02d}-{loss:.3f}.keras")
     return ModelCheckpoint(filepath=path, monitor="loss", save_best_only=True)
-
-
-# Chait
-#     # TODO -- Pick the first label if multiple objects exist -- change this based on how many class we want
-#     # Only pick CHAIR[9] PERSON[15] CAR[7] FROM DATASET
-#     # Returns a (3,) Tensor with
-#     return image, label, box

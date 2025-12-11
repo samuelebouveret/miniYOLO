@@ -7,7 +7,7 @@ import tensorflow_datasets as tfds
 import tensorflow as tf
 
 from keras.layers import Input
-from model import MiniYOLO, miniYOLO_optimizer, prepare_input, create_saving_callback
+from model import MiniYOLO, miniYOLO_optimizer, prepare_input, miniYOLO_saving_callback
 
 # NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS
@@ -65,12 +65,8 @@ train_ds: tf.data.Dataset
 validation_ds: tf.data.Dataset
 
 # 2. DATASET PREPROCESSING
-
 train_ds = train_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
 validation_ds = validation_ds.map(prepare_input, num_parallel_calls=tf.data.AUTOTUNE)
-
-# for ex in train_ds:
-#     print(train_ds)
 
 print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
@@ -95,16 +91,17 @@ model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1])
 output = model(input_layer)
 model.summary(expand_nested=True)
 
-# 4. MODEL TRAIN
-
+# 4. MODEL COMPILATION
 model.compile(
     optimizer=miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY),
-    loss="sparse_categorical_crossentropy",
+    loss="binary_crossentropy",
     metrics=["accuracy"],
 )
+
+# 5. MODEL TRAINING AND SAVING
 model.fit(
     train_ds,
     validation_data=validation_ds,
     epochs=EPOCH_NUM,
-    callbacks=create_saving_callback(SAVE_DIR),
+    callbacks=miniYOLO_saving_callback(SAVE_DIR),
 )
