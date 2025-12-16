@@ -82,17 +82,17 @@ def miniYOLO_optimizer(lr, mo, wd):
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
 
-def parse_dataset_xml(xml_path, max_objects, selected_classes):
+def _parse_dataset_xml(xml_path, max_objects, selected_classes):
     tree = ET.parse(xml_path)
     root = tree.getroot()
-
-    image_width = int(root.find("size/width").text)
-    image_height = int(root.find("size/height").text)
 
     labels = []
     bboxes = []
 
     selected_classes = [x.decode() for x in selected_classes]
+
+    image_width = int(root.find("size/width").text)
+    image_height = int(root.find("size/height").text)
 
     for obj in root.findall("object"):
         if len(labels) == max_objects:
@@ -135,7 +135,7 @@ def miniYOLO_load_example(image_path, xml_path, max_objects, selected_classes):
     image = tf.cast(image, tf.float32) / 255.0
 
     labels, bboxes = tf.py_function(
-        func=lambda x, y, z: parse_dataset_xml(x.numpy(), y, z.numpy()),
+        func=lambda x, y, z: _parse_dataset_xml(x.numpy(), y, z.numpy()),
         inp=[xml_path, max_objects, selected_classes],
         Tout=[tf.int32, tf.float32],
     )

@@ -21,6 +21,7 @@ from model import (
 # ONLY CHAIR[9] PERSON[15] CAR[7] FROM DATASET
 # IUO FUNCTIONS
 # ADD IMAGE AUGMENTATION LAYERS
+# TOO MANY RESIZES: PREPROCESSING+MODEL MAYBE SEE WHICH ONE TO KEEP CONSIDERING MICROC CAMERA
 
 # WORKFLOW:
 # 1. DATASET IMPORT: See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
@@ -77,7 +78,7 @@ C = len(SELECTED_CLASSES)
 B = 2
 S = 4
 MAX_OBJECTS = 7
-IMG_SIZE = (88, 88)
+IMG_SIZE = (244, 244)
 
 
 # Optimizer configs
