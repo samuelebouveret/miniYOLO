@@ -4,11 +4,17 @@ import glob
 # Removes tf logging
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+
 import tensorflow_datasets as tfds
 import tensorflow as tf
 
 from keras.layers import Input
-from model import MiniYOLO, miniYOLO_optimizer, load_example, miniYOLO_saving_callback
+from model import (
+    MiniYOLO,
+    miniYOLO_optimizer,
+    miniYOLO_load_example,
+    miniYOLO_saving_callback,
+)
 
 # NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS
@@ -27,6 +33,9 @@ from model import MiniYOLO, miniYOLO_optimizer, load_example, miniYOLO_saving_ca
 
 # SETTINGS
 
+# DEBUG MODE TO RUN EAGERLY
+tf.data.experimental.enable_debug_mode()
+
 # Generics
 # tfds dataset -- not useful anymore?
 DATA_DIR = "./data"
@@ -40,10 +49,36 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 TRAIN_VAL_RATIO = 0.9
 
 # Model configs
-IMG_SIZE = (88, 88)
+ALL_CLASSES = [
+    "aeroplane",
+    "bicycle",
+    "bird",
+    "boat",
+    "bottle",
+    "bus",
+    "car",
+    "cat",
+    "chair",
+    "cow",
+    "diningtable",
+    "dog",
+    "horse",
+    "motorbike",
+    "person",
+    "pottedplant",
+    "sheep",
+    "sofa",
+    "train",
+    "tvmonitor",
+]
+
+SELECTED_CLASSES = ["chair", "car", "person"]
+C = len(SELECTED_CLASSES)
 B = 2
 S = 4
-C = 3
+MAX_OBJECTS = 7
+IMG_SIZE = (88, 88)
+
 
 # Optimizer configs
 LEARNING_RATE = 0.01
@@ -64,7 +99,15 @@ xml_files = [
 dataset = tf.data.Dataset.from_tensor_slices((image_files, xml_files))
 
 # 2. DATASET PREPROCESSING
-dataset = dataset.map(load_example, num_parallel_calls=tf.data.AUTOTUNE)
+dataset = dataset.map(
+    lambda image_path, xml_path: miniYOLO_load_example(
+        image_path, xml_path, MAX_OBJECTS, SELECTED_CLASSES
+    ),
+    num_parallel_calls=tf.data.AUTOTUNE,
+)
+# TODO -- Remove its for debugging only
+for image, label, bbox in dataset:
+    print(f"LABEL -> {label} -- BBOX -> {bbox}")
 
 ds_size = dataset.cardinality().numpy()
 train_size = int(ds_size * TRAIN_VAL_RATIO)
