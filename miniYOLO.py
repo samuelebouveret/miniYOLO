@@ -1,5 +1,4 @@
 import os
-import glob
 
 # Removes tf logging
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -10,41 +9,45 @@ import tensorflow as tf
 
 from keras.layers import Input
 from model import (
-    MiniYOLO,
-    miniYOLO_optimizer,
+    MiniYOLOModel,
     miniYOLO_load_example,
+    miniYOLO_optimizer,
     miniYOLO_saving_callback,
 )
+from loss import MiniYOLO_loss
 
-# NEXT STEPS:
-# LOSS AND METRICS FUNCTIONS
-# ONLY CHAIR[9] PERSON[15] CAR[7] FROM DATASET
+# TODO -- NEXT STEPS:
+# LOSS AND METRICS FUNCTIONS OR JUST LOSS PROBABLY
+# ONLY CHAIR[9] PERSON[15] CAR[7] FROM DATASET -- DONE
 # IUO FUNCTIONS
 # ADD IMAGE AUGMENTATION LAYERS
-# TOO MANY RESIZES: PREPROCESSING+MODEL MAYBE SEE WHICH ONE TO KEEP CONSIDERING MICROC CAMERA
+# TOO MANY RESIZES: PREPROCESSING+MODEL MAYBE SEE WHICH ONE TO KEEP CONSIDERING MICROC CAMERA OR ASSUME PERFECT INPUT IMAGE SIZE
+# See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
+
+# CONSIDERATIONS FOR INFERENCE: IMAGES IN DATASET ARE RESIZE TO IMG_SIZE DURING PREPROCESSING, SO INFERENCE
+# MIGHT BE WEIRD DEPENDING ON IMAGE SIZE TODO LATER WHEN TESTING INFERENCE
+
 
 # WORKFLOW:
-# 1. DATASET IMPORT: See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
-# 2. DATASET PREPROCESSING: keeps useful tensors from tf dataset
-# 3. MODEL INITIALIZATION: configurate inside MiniYOLO class
-# 4. MODEL TRAIN the model: TODO
-# 5. MODEL SAVE the model: TODO
+# 1. DATASET IMPORT:
+# 2. DATASET PREPROCESSING
+# 3. MODEL INITIALIZATION
+# 4. MODEL COMPILATION
+# 5. MODEL TRAINING AND SAVING
 
 # ------------------------------------------------------------------------------
 
 # SETTINGS
 
-# DEBUG MODE TO RUN EAGERLY
+# TODO -- DEBUG MODE TO RUN EAGERLY -- TESTING ONLY
 tf.data.experimental.enable_debug_mode()
 
 # Generics
-# tfds dataset -- not useful anymore?
-DATA_DIR = "./data"
 DATA_DIR_IMAGES = "./data-temp/images"
 DATA_DIR_ANNOTATIONS = "./data-temp/annotations"
 SAVE_DIR = "./model-saves"
 
-os.makedirs(DATA_DIR, exist_ok=True)
+# TODO -- Maybe download and move to "images" "annotations" directories but yeah idk maybe not useful for this project
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 TRAIN_VAL_RATIO = 0.9
@@ -75,10 +78,10 @@ ALL_CLASSES = [
 
 SELECTED_CLASSES = ["chair", "car", "person"]
 C = len(SELECTED_CLASSES)
-B = 2
-S = 4
-MAX_OBJECTS = 7
-IMG_SIZE = (244, 244)
+B = 1
+S = 2
+MAX_OBJECTS = 3
+IMG_SIZE = (224, 224)
 
 
 # Optimizer configs
@@ -91,7 +94,12 @@ EPOCH_NUM = 1
 BATCH_SIZE = 32
 
 # 1. DATASET IMPORT
-image_files = sorted(glob.glob(os.path.join(DATA_DIR_IMAGES, "*.jpg")))
+image_files = sorted(
+    os.path.join(DATA_DIR_IMAGES, f)
+    for f in os.listdir(DATA_DIR_IMAGES)
+    if f.lower().endswith(".jpg")
+)
+
 xml_files = [
     f.replace(DATA_DIR_IMAGES, DATA_DIR_ANNOTATIONS).replace(".jpg", ".xml")
     for f in image_files
@@ -102,13 +110,22 @@ dataset = tf.data.Dataset.from_tensor_slices((image_files, xml_files))
 # 2. DATASET PREPROCESSING
 dataset = dataset.map(
     lambda image_path, xml_path: miniYOLO_load_example(
-        image_path, xml_path, MAX_OBJECTS, SELECTED_CLASSES
+        image_path,
+        xml_path,
+        MAX_OBJECTS,
+        SELECTED_CLASSES,
+        S,
+        B,
+        C,
+        IMG_SIZE[0],
+        IMG_SIZE[1],
     ),
     num_parallel_calls=tf.data.AUTOTUNE,
 )
-# TODO -- Remove its for debugging only
-for image, label, bbox in dataset:
-    print(f"LABEL -> {label} -- BBOX -> {bbox}")
+
+# TODO -- Debugging only
+for image, target in dataset:
+    print(f"LABEL -> {image.shape} -- BBOX -> {target.shape}")
 
 ds_size = dataset.cardinality().numpy()
 train_size = int(ds_size * TRAIN_VAL_RATIO)
@@ -120,7 +137,7 @@ print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
 
-# TODO -- Overwrite batch size since model.fit batches before training -- Either remove or change batch/shuffle size here
+# TODO -- Maybe keep shuffle for training - Maybe keep forced batch here (model.fit also batches with a defaul but can keep here to make it explicit)
 train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 validation_ds = validation_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
@@ -130,16 +147,15 @@ print(f"Epochs: {EPOCH_NUM}")
 print(f"Batches per epoch: {n_batches}")
 
 # 3. MODEL INITIALIZATION
-input_layer = Input(shape=(None, None, 3))
-model = MiniYOLO(IMG_SIZE[0], IMG_SIZE[1], S, B, C)
+input_layer = Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
+model = MiniYOLOModel(S, B, C)
 output = model(input_layer)
 model.summary()
 
 # 4. MODEL COMPILATION
 model.compile(
     optimizer=miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY),
-    loss="binary_crossentropy",
-    metrics=["accuracy"],
+    # loss="binary_crossentropy", TODO -- Obviously change was just for testing
 )
 
 # 5. MODEL TRAINING AND SAVING

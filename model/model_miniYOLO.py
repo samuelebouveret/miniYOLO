@@ -21,14 +21,25 @@ import xml.etree.ElementTree as ET
 import numpy as np
 
 
-class MiniYOLO(Model):
-    def __init__(self, h=88, w=88, S=2, B=2, C=3):
+# TODO -- CHANGE HEAD LATER FOR BETTER MEMORY (TOO MANY PARAMETERS NOW) OR REDUCE DENSE FILTER
+# TODO -- Maybe add param leaky
+class MiniYOLOModel(Model):
+    """Defines the MiniYOLO model overriding __init__ and call functions as in Keras documentation."""
+
+    def __init__(self, S, B, C):
+        """Creates the model structure.
+
+        Args:
+            S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
+            B (int): Maximum number of boxes recognizable by the model for each cell.
+            C (int): Number of classes recognizable by the model.
+        """
         super().__init__()
-        # TODO -- Maybe add param leaky
-        output_filters = B * 5 + C
+        self.S = S
+        self.B = B
+        self.C = C
+        self.output_size = S * S * (B * 5 + C)
         leaky_layer = LeakyReLU(0.1)
-        self.resize = Resizing(height=h, width=w)
-        self.rescale = Rescaling(1.0 / 255)
         self.conv1 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
         self.conv2 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
         self.pool1 = MaxPooling2D(pool_size=(2, 2), strides=2)
@@ -49,13 +60,20 @@ class MiniYOLO(Model):
         self.conv10 = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")
         self.pool5 = MaxPooling2D(pool_size=(2, 2), strides=2)
 
-        self.convoutput = Conv2D(output_filters, 1, padding="same")
-        # self.reshape = Reshape((S, S, output_filters))
+        self.flatten = Flatten()
+        self.fc1 = Dense(256, activation=leaky_layer)
+        self.fc2 = Dense(self.output_size)
 
     def call(self, inputs):
-        x = self.resize(inputs)
-        x = self.rescale(x)
-        x = self.conv1(x)
+        """Define the forward propagation of the model.
+
+        Args:
+            inputs (keras.layers.Input): Input layer corresponding to the image input.
+
+        Returns:
+            _type_: Reshaped output YOLOv1 tensor -> (S,S,(B*5+C)).
+        """
+        x = self.conv1(inputs)
         x = self.conv2(x)
         x = self.pool1(x)
         x = self.conv3(x)
@@ -74,12 +92,60 @@ class MiniYOLO(Model):
         x = self.conv10(x)
         x = self.pool5(x)
 
-        x = self.convoutput(x)
-        return x
+        x = self.flatten(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
+
+        return tf.reshape(x, (-1, self.S, self.S, self.B * 5 + self.C))
 
 
-def miniYOLO_optimizer(lr, mo, wd):
-    return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
+def miniYOLO_load_example(
+    image_path,
+    xml_path,
+    max_objects,
+    selected_classes,
+    S,
+    B,
+    C,
+    image_width,
+    image_height,
+):
+    """Preprocesses each image and prepares the YOLOv1 (S,S,(B*5+C)) target tensor and image for model training.
+
+    Args:
+        image_path (str): Path to the image.
+        xml_path (str): Path to the xml annotation file related to the image.
+        max_objects (int): Maximum number of objects recognizable by the model inside the whole image.
+        selected_classes (list(str)): List of classes that the model is trained for recognition.
+        S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
+        B (int): Maximum number of boxes recognizable by the model for each cell.
+        C (int): Number of classes recognizable by the model.
+        image_width (int): Number of pixels to resize the input image width.
+        image_height (int): Number of pixels to resize the input image height.
+
+    Returns:
+        Resized image Tensor: Model ready image tensor.
+        Target Tensor: Target Tensor as in YOLOv1 definition.
+    """
+    image = tf.io.read_file(image_path)
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.resize(image, (image_width, image_height))
+    image = tf.cast(image, tf.float32) / 255.0
+
+    labels, bboxes = tf.py_function(
+        func=lambda x, y, z: _parse_dataset_xml(x.numpy(), y, z.numpy()),
+        inp=[xml_path, max_objects, selected_classes],
+        Tout=[tf.int32, tf.float32],
+    )
+
+    target = tf.py_function(
+        func=lambda x, y: _set_target(x.numpy(), y.numpy(), S, B, C),
+        inp=[labels, bboxes],
+        Tout=tf.float32,
+    )
+
+    target.set_shape([S, S, B * 5 + C])
+    return image, target
 
 
 def _parse_dataset_xml(xml_path, max_objects, selected_classes):
@@ -103,7 +169,6 @@ def _parse_dataset_xml(xml_path, max_objects, selected_classes):
             name, -1
         )
 
-        # TODO NEED TO PAD CUZ RATIOS ARE NOT THE SAME IN INPUT AND AFTER MODEL RESIZES!!!
         if class_id != -1:
             bbox = obj.find("bndbox")
             xmin = float(bbox.find("xmin").text) / image_width
@@ -128,21 +193,62 @@ def _parse_dataset_xml(xml_path, max_objects, selected_classes):
     return labels, bboxes
 
 
-def miniYOLO_load_example(image_path, xml_path, max_objects, selected_classes):
-    image = tf.io.read_file(image_path)
-    image = tf.image.decode_jpeg(image, channels=3)
-    image = tf.image.resize(image, (224, 224))
-    image = tf.cast(image, tf.float32) / 255.0
+def _set_target(labels, bboxes, S, B, C):
+    target = np.zeros((S, S, B * 5 + C), dtype=np.float32)
 
-    labels, bboxes = tf.py_function(
-        func=lambda x, y, z: _parse_dataset_xml(x.numpy(), y, z.numpy()),
-        inp=[xml_path, max_objects, selected_classes],
-        Tout=[tf.int32, tf.float32],
-    )
+    if not np.all(labels == 0):
+        for label, bbox in zip(labels, bboxes):
+            if label == 0:
+                continue
 
-    return image, labels, bboxes
+            x_center = (bbox[0] + bbox[2]) / 2
+            y_center = (bbox[1] + bbox[3]) / 2
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
+
+            cell_x = int(x_center * S)
+            cell_y = int(y_center * S)
+            cell_x = min(cell_x, S - 1)
+            cell_y = min(cell_y, S - 1)
+
+            for b in range(B):
+                if target[cell_y, cell_x, b * 5 + 4] == 0:
+                    target[cell_y, cell_x, b * 5 : b * 5 + 4] = [
+                        x_center,
+                        y_center,
+                        w,
+                        h,
+                    ]
+                    target[cell_y, cell_x, b * 5 + 4] = 1.0
+                    target[cell_y, cell_x, B * 5 + (label - 1)] = 1.0
+                    break
+
+    return target
 
 
+def miniYOLO_optimizer(lr, mo, wd):
+    """Creates a Stochastic Gradient Descend used to play with learning parameters.
+
+    Args:
+        lr (float): Learning rate at which the parameters are changed during learning.
+        mo (float): Momentum keeps the model learning towards improvements.
+        wd (float): Weight decay reduces large weights to prevent overfitting.
+
+    Returns:
+        keras.optimizers.SGD: SGD object used for model compilation.
+    """
+    return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
+
+
+# TODO -- Change loss name in monitor argument
 def miniYOLO_saving_callback(dir_path):
+    """Callback that saves the model weights and configuration on model improments after each epoch.
+
+    Args:
+        dir_path (str): Path to the saving directory.
+
+    Returns:
+        keras.callbacks.ModelCheckpointype: Returns the model.
+    """
     path = join(dir_path, "trained_model-{epoch:02d}-{loss:.3f}.keras")
     return ModelCheckpoint(filepath=path, monitor="loss", save_best_only=True)
