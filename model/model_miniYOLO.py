@@ -26,7 +26,7 @@ class MiniYOLOModel(Model):
 
         Args:
             S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-            B (int): Maximum number of boxes recognizable by the model for each cell.
+            B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
             C (int): Number of classes recognizable by the model.
         """
         super().__init__()
@@ -113,7 +113,7 @@ def miniYOLO_load_example(
         max_objects (int): Maximum number of objects recognizable by the model inside the whole image.
         selected_classes (list(str)): List of classes that the model is trained for recognition.
         S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-        B (int): Maximum number of boxes recognizable by the model for each cell.
+        B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
         C (int): Number of classes recognizable by the model.
         image_width (int): Number of pixels to resize the input image width.
         image_height (int): Number of pixels to resize the input image height.
@@ -144,6 +144,17 @@ def miniYOLO_load_example(
 
 
 def _parse_dataset_xml(xml_path, max_objects, selected_classes):
+    """Retrieves and prepares label and bbox tensor from xml files. Function is YOLOv1 agnostic at this point and is separated from _set_target for logic purpose only.
+
+    Args:
+        xml_path (str): File path to look into.
+        max_objects (int): Maximum number of objects detectable per image.
+        selected_classes (list(str)): List containing all the classes to be detected.
+
+    Returns:
+        Label Tensor: Tensor containing the classes matches, 0 if none is found. Not yet 1hot enconded.
+        Bboxes Tensor: Bboxes tensor containing image relative information for the bounding boxes.
+    """
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
@@ -189,6 +200,19 @@ def _parse_dataset_xml(xml_path, max_objects, selected_classes):
 
 
 def _set_target(labels, bboxes, S, B, C):
+    """Prepares the true YOLOv1 targets, using previously parsed data from the xml files and S,B,C parameters. The bbox center offset is calculated here and correct
+    shaping is applied. Labels are also 1hot encoded here.
+
+    Args:
+        labels (Tensor): Labels tensor from _parse_dataset_xml function
+        bboxes (Tensor): Bboxes tensor from _parse_dataset_xml
+        S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
+        B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
+        C (int): Number of classes recognizable by the model.
+
+    Returns:
+        Target tensor: Final SxSx(B*5+C) YOLOv1 target tensor.
+    """
     target = np.zeros((S, S, B * 5 + C), dtype=np.float32)
 
     if not np.all(labels == 0):
@@ -219,7 +243,7 @@ def _set_target(labels, bboxes, S, B, C):
 
 
 def miniYOLO_optimizer(lr, mo, wd):
-    """Creates a Stochastic Gradient Descend used to play with learning parameters.
+    """Creates a Stochastic Gradient Descend optimizer for the learning process.
 
     Args:
         lr (float): Learning rate at which the parameters are changed during learning.
@@ -227,7 +251,7 @@ def miniYOLO_optimizer(lr, mo, wd):
         wd (float): Weight decay reduces large weights to prevent overfitting.
 
     Returns:
-        keras.optimizers.SGD: SGD object used for model compilation.
+        keras.optimizers.SGD: SGD object used for training.
     """
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
