@@ -1,24 +1,19 @@
+import os
 from keras import Model
 from keras.layers import (
     Conv2D,
     MaxPooling2D,
     Flatten,
     Dense,
-    Resizing,
-    Rescaling,
     LeakyReLU,
-    Reshape,
 )
 
-from os.path import join
 from keras.optimizers import SGD
 from keras.callbacks import ModelCheckpoint
-from tensorflow import cast, float32
-from tensorflow.python.ops.image_ops_impl import resize_images_v2 as resize
 
 import tensorflow as tf
-import xml.etree.ElementTree as ET
 import numpy as np
+import xml.etree.ElementTree as ET
 
 
 # TODO -- CHANGE HEAD LATER FOR BETTER MEMORY (TOO MANY PARAMETERS NOW) OR REDUCE DENSE FILTER
@@ -30,7 +25,7 @@ class MiniYOLOModel(Model):
         """Creates the model structure.
 
         Args:
-            S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
+            S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
             B (int): Maximum number of boxes recognizable by the model for each cell.
             C (int): Number of classes recognizable by the model.
         """
@@ -125,7 +120,7 @@ def miniYOLO_load_example(
 
     Returns:
         Resized image Tensor: Model ready image tensor.
-        Target Tensor: Target Tensor as in YOLOv1 definition.
+        Target Tensor: Target tensor as in YOLOv1 definition.
     """
     image = tf.io.read_file(image_path)
     image = tf.image.decode_jpeg(image, channels=3)
@@ -211,17 +206,14 @@ def _set_target(labels, bboxes, S, B, C):
             cell_x = min(cell_x, S - 1)
             cell_y = min(cell_y, S - 1)
 
-            for b in range(B):
-                if target[cell_y, cell_x, b * 5 + 4] == 0:
-                    target[cell_y, cell_x, b * 5 : b * 5 + 4] = [
-                        x_center,
-                        y_center,
-                        w,
-                        h,
-                    ]
-                    target[cell_y, cell_x, b * 5 + 4] = 1.0
-                    target[cell_y, cell_x, B * 5 + (label - 1)] = 1.0
-                    break
+            x_center_offset = x_center * S - cell_x
+            y_center_offset = y_center * S - cell_y
+
+            if target[cell_y, cell_x, 4] == 1:
+                continue
+
+            target[cell_y, cell_x, 0:5] = [x_center_offset, y_center_offset, w, h, 1.0]
+            target[cell_y, cell_x, B * 5 + (label - 1)] = 1.0
 
     return target
 
@@ -250,5 +242,5 @@ def miniYOLO_saving_callback(dir_path):
     Returns:
         keras.callbacks.ModelCheckpointype: Returns the model.
     """
-    path = join(dir_path, "trained_model-{epoch:02d}-{loss:.3f}.keras")
+    path = os.path.join(dir_path, "trained_model-{epoch:02d}-{loss:.3f}.keras")
     return ModelCheckpoint(filepath=path, monitor="loss", save_best_only=True)

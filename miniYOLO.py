@@ -19,6 +19,7 @@ from loss import MiniYOLO_loss
 # TODO -- NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS OR JUST LOSS PROBABLY
 # ONLY CHAIR[9] PERSON[15] CAR[7] FROM DATASET -- DONE
+# SEE IF OBJ DETECTION BBOX IS OFFSET FROM CELL AND NOT FROM IMAGE, MIGHT BE WRONG ALSO HARD TO TEST
 # IUO FUNCTIONS
 # ADD IMAGE AUGMENTATION LAYERS
 # TOO MANY RESIZES: PREPROCESSING+MODEL MAYBE SEE WHICH ONE TO KEEP CONSIDERING MICROC CAMERA OR ASSUME PERFECT INPUT IMAGE SIZE
@@ -29,7 +30,8 @@ from loss import MiniYOLO_loss
 
 
 # WORKFLOW:
-# 1. DATASET IMPORT:
+# CONFIGURATION
+# 1. DATASET IMPORT
 # 2. DATASET PREPROCESSING
 # 3. MODEL INITIALIZATION
 # 4. MODEL COMPILATION
@@ -37,19 +39,20 @@ from loss import MiniYOLO_loss
 
 # ------------------------------------------------------------------------------
 
-# SETTINGS
+# --- CONFIGURATION START ---
 
 # TODO -- DEBUG MODE TO RUN EAGERLY -- TESTING ONLY
 tf.data.experimental.enable_debug_mode()
 
-# Generics
-DATA_DIR_IMAGES = "./data-temp/images"
-DATA_DIR_ANNOTATIONS = "./data-temp/annotations"
+# Generic configs
+DATA_DIR_IMAGES = "./data/images"
+DATA_DIR_ANNOTATIONS = "./data/annotations"
 SAVE_DIR = "./model-saves"
 
 # TODO -- Maybe download and move to "images" "annotations" directories but yeah idk maybe not useful for this project
 os.makedirs(SAVE_DIR, exist_ok=True)
 
+# Dataset configs
 TRAIN_VAL_RATIO = 0.9
 
 # Model configs
@@ -78,7 +81,7 @@ ALL_CLASSES = [
 
 SELECTED_CLASSES = ["chair", "car", "person"]
 C = len(SELECTED_CLASSES)
-B = 1
+B = 2
 S = 2
 MAX_OBJECTS = 3
 IMG_SIZE = (224, 224)
@@ -92,6 +95,8 @@ WEIGHT_DECAY = 0.0005
 # Training configs
 EPOCH_NUM = 1
 BATCH_SIZE = 32
+
+# --- CONFIGUARTION END ---
 
 # 1. DATASET IMPORT
 image_files = sorted(
@@ -125,7 +130,7 @@ dataset = dataset.map(
 
 # TODO -- Debugging only
 for image, target in dataset:
-    print(f"LABEL -> {image.shape} -- BBOX -> {target.shape}")
+    print(f"LABEL -> {image.shape} -- TARGET -> {target}")
 
 ds_size = dataset.cardinality().numpy()
 train_size = int(ds_size * TRAIN_VAL_RATIO)
@@ -137,14 +142,11 @@ print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
 print(f"TRAINING dataset image count: {len(train_ds)}")
 print(f"VALIDATION dataset image count: {len(validation_ds)}")
 
-# TODO -- Maybe keep shuffle for training - Maybe keep forced batch here (model.fit also batches with a defaul but can keep here to make it explicit)
 train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 validation_ds = validation_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-# Calculate batches before training
-n_batches = tf.data.experimental.cardinality(train_ds).numpy()
 print(f"Epochs: {EPOCH_NUM}")
-print(f"Batches per epoch: {n_batches}")
+print(f"Batches per epoch: {len(train_ds)}")
 
 # 3. MODEL INITIALIZATION
 input_layer = Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
@@ -152,16 +154,22 @@ model = MiniYOLOModel(S, B, C)
 output = model(input_layer)
 model.summary()
 
+
 # 4. MODEL COMPILATION
+opt = miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY)
+loss_fn = MiniYOLO_loss(S, B, C)
+
 model.compile(
-    optimizer=miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY),
-    # loss="binary_crossentropy", TODO -- Obviously change was just for testing
+    optimizer=opt,
+    loss=loss_fn,
 )
 
 # 5. MODEL TRAINING AND SAVING
+callback = miniYOLO_saving_callback(SAVE_DIR)
+
 model.fit(
     train_ds,
     validation_data=validation_ds,
     epochs=EPOCH_NUM,
-    callbacks=miniYOLO_saving_callback(SAVE_DIR),
+    callbacks=callback,
 )
