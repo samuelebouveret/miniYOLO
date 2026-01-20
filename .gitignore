@@ -1,0 +1,6 @@
+__pycache__
+model-saves/
+data/
+venv
+data-temp/
+*.xml
