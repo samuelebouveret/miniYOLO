@@ -18,12 +18,10 @@ from loss import MiniYOLO_loss
 
 # TODO -- NEXT STEPS:
 # LOSS AND METRICS FUNCTIONS OR JUST LOSS PROBABLY
-# ONLY CHAIR[9] PERSON[15] CAR[7] FROM DATASET -- DONE
-# SEE IF OBJ DETECTION BBOX IS OFFSET FROM CELL AND NOT FROM IMAGE, MIGHT BE WRONG ALSO HARD TO TEST
-# IUO FUNCTIONS
 # ADD IMAGE AUGMENTATION LAYERS
 # TOO MANY RESIZES: PREPROCESSING+MODEL MAYBE SEE WHICH ONE TO KEEP CONSIDERING MICROC CAMERA OR ASSUME PERFECT INPUT IMAGE SIZE
 # See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
+# CHANGE DOCSTRING SBC , S IS NOT NECESSARILY PIXEL WISE BUT JUST VIRTUAL DIVISION AND B DESCRIPTION IS DEFINITELY NOT ACCURATE
 
 # CONSIDERATIONS FOR INFERENCE: IMAGES IN DATASET ARE RESIZE TO IMG_SIZE DURING PREPROCESSING, SO INFERENCE
 # MIGHT BE WEIRD DEPENDING ON IMAGE SIZE TODO LATER WHEN TESTING INFERENCE
@@ -43,6 +41,7 @@ from loss import MiniYOLO_loss
 
 # TODO -- DEBUG MODE TO RUN EAGERLY -- TESTING ONLY
 tf.data.experimental.enable_debug_mode()
+tf.config.run_functions_eagerly(True)
 
 # Generic configs
 DATA_DIR_IMAGES = "./data/images"
@@ -86,9 +85,8 @@ S = 2
 MAX_OBJECTS = 3
 IMG_SIZE = (224, 224)
 
-
 # Optimizer configs
-LEARNING_RATE = 0.01
+LEARNING_RATE = 1e-4
 MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 
@@ -96,80 +94,89 @@ WEIGHT_DECAY = 0.0005
 EPOCH_NUM = 1
 BATCH_SIZE = 32
 
+# Loss function configs
+LAMBDA_COORD = 5.0
+LAMBDA_NOOBJ = 0.5
+
 # --- CONFIGUARTION END ---
 
-# 1. DATASET IMPORT
-image_files = sorted(
-    os.path.join(DATA_DIR_IMAGES, f)
-    for f in os.listdir(DATA_DIR_IMAGES)
-    if f.lower().endswith(".jpg")
-)
 
-xml_files = [
-    f.replace(DATA_DIR_IMAGES, DATA_DIR_ANNOTATIONS).replace(".jpg", ".xml")
-    for f in image_files
-]
+def run_training():
+    # 1. DATASET IMPORT
+    image_files = sorted(
+        os.path.join(DATA_DIR_IMAGES, f)
+        for f in os.listdir(DATA_DIR_IMAGES)
+        if f.lower().endswith(".jpg")
+    )
 
-dataset = tf.data.Dataset.from_tensor_slices((image_files, xml_files))
+    xml_files = [
+        f.replace(DATA_DIR_IMAGES, DATA_DIR_ANNOTATIONS).replace(".jpg", ".xml")
+        for f in image_files
+    ]
 
-# 2. DATASET PREPROCESSING
-dataset = dataset.map(
-    lambda image_path, xml_path: miniYOLO_load_example(
-        image_path,
-        xml_path,
-        MAX_OBJECTS,
-        SELECTED_CLASSES,
-        S,
-        B,
-        C,
-        IMG_SIZE[0],
-        IMG_SIZE[1],
-    ),
-    num_parallel_calls=tf.data.AUTOTUNE,
-)
+    dataset = tf.data.Dataset.from_tensor_slices((image_files, xml_files))
 
-# TODO -- Debugging only
-for image, target in dataset:
-    print(f"LABEL -> {image.shape} -- TARGET -> {target}")
+    # 2. DATASET PREPROCESSING
+    dataset = dataset.map(
+        lambda image_path, xml_path: miniYOLO_load_example(
+            image_path,
+            xml_path,
+            MAX_OBJECTS,
+            SELECTED_CLASSES,
+            S,
+            B,
+            C,
+            IMG_SIZE[0],
+            IMG_SIZE[1],
+        ),
+        num_parallel_calls=tf.data.AUTOTUNE,
+    )
 
-ds_size = dataset.cardinality().numpy()
-train_size = int(ds_size * TRAIN_VAL_RATIO)
+    # # TODO -- Debugging only
+    # for image, target in dataset:
+    #     print(f"LABEL -> {type(target)} -- TARGET -> {target}")
 
-train_ds = dataset.take(train_size)
-validation_ds = dataset.skip(train_size)
+    train_size = int(len(dataset) * TRAIN_VAL_RATIO)
+    train_ds = dataset.take(train_size)
+    validation_ds = dataset.skip(train_size)
 
-print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
-print(f"TRAINING dataset image count: {len(train_ds)}")
-print(f"VALIDATION dataset image count: {len(validation_ds)}")
+    print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
+    print(f"TRAINING dataset image count: {len(train_ds)}")
+    print(f"VALIDATION dataset image count: {len(validation_ds)}")
 
-train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-validation_ds = validation_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    validation_ds = validation_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-print(f"Epochs: {EPOCH_NUM}")
-print(f"Batches per epoch: {len(train_ds)}")
+    print(f"Epochs: {EPOCH_NUM}")
+    print(f"Batches per epoch: {len(train_ds)}")
 
-# 3. MODEL INITIALIZATION
-input_layer = Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
-model = MiniYOLOModel(S, B, C)
-output = model(input_layer)
-model.summary()
+    # 3. MODEL INITIALIZATION
+    input_layer = Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
+    model = MiniYOLOModel(S, B, C)
+    output = model(input_layer)
+    model.summary()
+
+    # 4. MODEL COMPILATION
+    opt = miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY)
+    loss_fn = MiniYOLO_loss(S, B, C, LAMBDA_COORD, LAMBDA_NOOBJ)
+
+    model.compile(
+        optimizer=opt,
+        loss=loss_fn,
+    )
+
+    # 5. MODEL TRAINING AND SAVING
+    callback = miniYOLO_saving_callback(SAVE_DIR)
+
+    model.fit(
+        train_ds,
+        validation_data=validation_ds,
+        epochs=EPOCH_NUM,
+        callbacks=callback,
+    )
 
 
-# 4. MODEL COMPILATION
-opt = miniYOLO_optimizer(LEARNING_RATE, MOMENTUM, WEIGHT_DECAY)
-loss_fn = MiniYOLO_loss(S, B, C)
-
-model.compile(
-    optimizer=opt,
-    loss=loss_fn,
-)
-
-# 5. MODEL TRAINING AND SAVING
-callback = miniYOLO_saving_callback(SAVE_DIR)
-
-model.fit(
-    train_ds,
-    validation_data=validation_ds,
-    epochs=EPOCH_NUM,
-    callbacks=callback,
-)
+if __name__ == "__main__":
+    print("Starting training process.")
+    run_training()
+    print("Training ended succesfully.")

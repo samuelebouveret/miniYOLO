@@ -29,6 +29,7 @@ class MiniYOLOModel(Model):
             B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
             C (int): Number of classes recognizable by the model.
         """
+
         super().__init__()
         self.S = S
         self.B = B
@@ -66,8 +67,9 @@ class MiniYOLOModel(Model):
             inputs (keras.layers.Input): Input layer corresponding to the image input.
 
         Returns:
-            _type_: Reshaped output YOLOv1 tensor -> (S,S,(B*5+C)).
+            Tensor: Reshaped output YOLOv1 tensor -> (S,S,(B*5+C)).
         """
+
         x = self.conv1(inputs)
         x = self.conv2(x)
         x = self.pool1(x)
@@ -91,9 +93,31 @@ class MiniYOLOModel(Model):
         x = self.fc1(x)
         x = self.fc2(x)
 
-        return tf.reshape(x, (-1, self.S, self.S, self.B * 5 + self.C))
+        y_pred = tf.reshape(x, (-1, self.S, self.S, self.B * 5 + self.C))
+
+        pred_boxes = y_pred[..., : self.B * 5]
+        pred_boxes = tf.reshape(pred_boxes, (-1, self.S, self.S, self.B, 5))
+
+        pred_boxes = tf.concat(
+            [
+                tf.sigmoid(pred_boxes[..., 0:2]),
+                tf.square(pred_boxes[..., 2:4]),
+                tf.sigmoid(pred_boxes[..., 4:5]),
+            ],
+            axis=-1,
+        )
+
+        pred_classes = y_pred[..., self.B * 5 :]
+
+        y_pred_safe = tf.concat(
+            [tf.reshape(pred_boxes, (-1, self.S, self.S, self.B * 5)), pred_classes],
+            axis=-1,
+        )
+
+        return y_pred_safe
 
 
+# TODO -- Remove shape if unecessary
 def miniYOLO_load_example(
     image_path,
     xml_path,
@@ -122,6 +146,7 @@ def miniYOLO_load_example(
         Resized image Tensor: Model ready image tensor.
         Target Tensor: Target tensor as in YOLOv1 definition.
     """
+
     image = tf.io.read_file(image_path)
     image = tf.image.decode_jpeg(image, channels=3)
     image = tf.image.resize(image, (image_width, image_height))
@@ -139,7 +164,7 @@ def miniYOLO_load_example(
         Tout=tf.float32,
     )
 
-    target.set_shape([S, S, B * 5 + C])
+    # target.set_shape([S, S, B * 5 + C])
     return image, target
 
 
@@ -155,6 +180,7 @@ def _parse_dataset_xml(xml_path, max_objects, selected_classes):
         Label Tensor: Tensor containing the classes matches, 0 if none is found. Not yet 1hot enconded.
         Bboxes Tensor: Bboxes tensor containing image relative information for the bounding boxes.
     """
+
     tree = ET.parse(xml_path)
     root = tree.getroot()
 
@@ -213,6 +239,7 @@ def _set_target(labels, bboxes, S, B, C):
     Returns:
         Target tensor: Final SxSx(B*5+C) YOLOv1 target tensor.
     """
+
     target = np.zeros((S, S, B * 5 + C), dtype=np.float32)
 
     if not np.all(labels == 0):
@@ -253,6 +280,7 @@ def miniYOLO_optimizer(lr, mo, wd):
     Returns:
         keras.optimizers.SGD: SGD object used for training.
     """
+
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
 
@@ -266,5 +294,6 @@ def miniYOLO_saving_callback(dir_path):
     Returns:
         keras.callbacks.ModelCheckpointype: Returns the model.
     """
+
     path = os.path.join(dir_path, "trained_model-{epoch:02d}-{loss:.3f}.keras")
     return ModelCheckpoint(filepath=path, monitor="loss", save_best_only=True)
