@@ -1,7 +1,9 @@
+"""This file contains the YOLOv1 loss implementation, with its relative IOU and box manipulation decoder functions."""
+
 import tensorflow as tf
 
 
-class MiniYOLO_loss(tf.keras.losses.Loss):
+class MiniyoloLoss(tf.keras.losses.Loss):
     """Defines the MiniYOLO loss function overriding the call functions as in Keras documentation."""
 
     def __init__(self, S, B, C, lambda_coord=5.0, lambda_noobj=0.5):
