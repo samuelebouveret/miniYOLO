@@ -1,6 +1,8 @@
 __pycache__
-model-saves/
+trained/
 data/
 venv
 data-temp/
 *.xml
+.ipynb_checkpoints
+*.ipynb
