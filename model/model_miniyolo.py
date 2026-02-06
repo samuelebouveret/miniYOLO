@@ -103,7 +103,7 @@ class MiniyoloModel(Model):
         pred_boxes = tf.concat(
             [
                 tf.sigmoid(pred_boxes[..., 0:2]),
-                tf.square(pred_boxes[..., 2:4]),
+                tf.sigmoid(pred_boxes[..., 2:4]),
                 tf.sigmoid(pred_boxes[..., 4:5]),
             ],
             axis=-1,
@@ -129,6 +129,7 @@ def miniyolo_load_example(
     C,
     image_width,
     image_height,
+    training=False,
 ):
     """Preprocesses each image and prepares the YOLOv1 (S,S,(B*5+C)) target tensor and image for model training.
 
@@ -148,10 +149,9 @@ def miniyolo_load_example(
         Target Tensor: Target tensor as in YOLOv1 definition.
     """
 
-    image = tf.io.read_file(image_path)
-    image = tf.image.decode_jpeg(image, channels=3)
-    image = tf.image.resize(image, (image_width, image_height))
-    image = tf.cast(image, tf.float32) / 255.0
+    image = tf.image.decode_jpeg(tf.io.read_file(image_path), channels=3)
+    image = tf.image.resize(image, (image_height, image_width))
+    image = tf.image.convert_image_dtype(image, tf.float32)
 
     labels, bboxes = tf.py_function(
         func=lambda x, y, z: _parse_dataset_xml(x.numpy(), y, z.numpy()),
@@ -159,11 +159,17 @@ def miniyolo_load_example(
         Tout=[tf.int32, tf.float32],
     )
 
+    labels.set_shape([max_objects])
+    bboxes.set_shape([max_objects, 4])
+
     target = tf.py_function(
         func=lambda x, y: _set_target(x.numpy(), y.numpy(), S, B, C),
         inp=[labels, bboxes],
         Tout=tf.float32,
     )
+
+    target.set_shape([S, S, B * 5 + C])
+    image.set_shape([image_height, image_width, 3])
 
     return image, target
 
@@ -177,7 +183,7 @@ def _parse_dataset_xml(xml_path, max_objects, selected_classes):
         selected_classes (list(str)): List containing all the classes to be detected.
 
     Returns:
-        Label Tensor: Tensor containing the classes matches, 0 if none is found. Not yet 1hot enconded.
+        Label Tensor: Tensor containing the classes matches, 0 if none is found. Not yet 1hot encoded.
         Bboxes Tensor: Bboxes tensor containing image relative information for the bounding boxes.
     """
 
@@ -284,9 +290,8 @@ def miniyolo_optimizer(lr, mo, wd):
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
 
-# TODO -- Change loss name in monitor argument
 def miniyolo_saving_callback(dir_path):
-    """Callback that saves the model weights and configuration on model improments after each epoch.
+    """Callback that saves the model weights and configuration on model improvements after each epoch.
 
     Args:
         dir_path (str): Path to the saving directory.

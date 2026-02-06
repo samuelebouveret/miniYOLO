@@ -38,8 +38,8 @@ from model import (
 # --- CONFIGURATION START ---
 
 # TODO -- DEBUG MODE TO RUN EAGERLY -- TESTING ONLY
-tf.data.experimental.enable_debug_mode()
-tf.config.run_functions_eagerly(True)
+# tf.data.experimental.enable_debug_mode()
+# tf.config.run_functions_eagerly(True)
 
 # Generic configs
 DATA_DIR_IMAGES = "./data/images"
@@ -98,7 +98,7 @@ BATCH_SIZE = 32
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 
-# --- CONFIGUARTION END ---
+# --- CONFIGURATION END ---
 
 
 def run_training():
@@ -179,4 +179,4 @@ def run_training():
 if __name__ == "__main__":
     print("Starting training process.")
     run_training()
-    print("Training ended succesfully.")
+    print("Training ended successfully.")

@@ -6,3 +6,4 @@ data-temp/
 *.xml
 .ipynb_checkpoints
 *.ipynb
+evaluate.py

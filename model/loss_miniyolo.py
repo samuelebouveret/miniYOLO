@@ -7,7 +7,7 @@ class MiniyoloLoss(tf.keras.losses.Loss):
     """Defines the MiniYOLO loss function overriding the call functions as in Keras documentation."""
 
     def __init__(self, S, B, C, lambda_coord=5.0, lambda_noobj=0.5):
-        """Initializes the loss class witth the YOLOv1 relative parameters.
+        """Initializes the loss class with the YOLOv1 relative parameters.
 
         Args:
             S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
@@ -58,37 +58,45 @@ class MiniyoloLoss(tf.keras.losses.Loss):
         true_classes = y_true[..., self.B * 5 :]
 
         obj_mask_box = true_boxes[..., 4:5]
-        obj_mask_cell = tf.reduce_max(obj_mask_box, axis=3)
+        obj_mask_cell = tf.reduce_max(obj_mask_box, axis=3)  # (B,S,S,1)
 
-        # Converts (x_offset, y_offset, width, height) -> (x1, y1, x2, y2) corners relative to the image
+        # Use the single ground truth box in the cell (assumes only box 0 is filled in targets)
+        true_boxes_single = true_boxes[..., 0:1, 0:4]  # (B,S,S,1,4)
+
+        # Decode boxes
         pred_xyxy = self._decode_boxes(pred_boxes)
-        true_xyxy = self._decode_boxes(true_boxes)
+        true_xyxy = self._decode_boxes(true_boxes_single)
 
-        ious = self._iou(pred_xyxy, true_xyxy)
-        best_iou = tf.reduce_max(ious, axis=-1, keepdims=True)
-        responsible = tf.cast(ious >= best_iou, tf.float32)[..., None]
-        responsible = responsible * obj_mask_box
+        # IoU against single ground truth box for all B predictions
+        ious = self._iou(pred_xyxy, true_xyxy)  # (B,S,S,B)
+        best_iou = tf.reduce_max(ious, axis=3, keepdims=True)
+
+        # Pick a single responsible box
+        best_idx = tf.argmax(ious, axis=3)  # (B,S,S)
+        responsible = tf.one_hot(best_idx, depth=self.B, dtype=tf.float32)
+        responsible = responsible[..., None]  # (B,S,S,B,1)
+        responsible = responsible * obj_mask_cell[..., None]
 
         # Coordinate loss
+        true_xywh = tf.tile(true_boxes_single, [1, 1, 1, self.B, 1])
         coord_loss = tf.reduce_sum(
             responsible
             * (
-                tf.square(pred_boxes[..., 0:2] - true_boxes[..., 0:2])
-                + tf.square(
-                    tf.sqrt(pred_boxes[..., 2:4] + 1e-6)
-                    - tf.sqrt(true_boxes[..., 2:4] + 1e-6)
-                )
+                tf.square(pred_boxes[..., 0:2] - true_xywh[..., 0:2])
+                + tf.square(pred_boxes[..., 2:4] - true_xywh[..., 2:4])
             )
         )
 
-        # Confidence loss
+        # Confidence loss (obj) uses best IoU target
         conf_obj_loss = tf.reduce_sum(
-            responsible * tf.square(pred_boxes[..., 4:5] - ious[..., None])
+            responsible * tf.square(pred_boxes[..., 4:5] - best_iou[..., None])
         )
 
-        conf_noobj_loss = tf.reduce_sum(
-            (1.0 - obj_mask_box) * tf.square(pred_boxes[..., 4:5])
+        # Confidence loss (no-obj in empty cells + non-responsible in object cells)
+        noobj_mask = (1.0 - obj_mask_cell)[..., None] + obj_mask_cell[..., None] * (
+            1.0 - responsible
         )
+        conf_noobj_loss = tf.reduce_sum(noobj_mask * tf.square(pred_boxes[..., 4:5]))
 
         # Class loss
         class_loss = tf.reduce_sum(
@@ -103,17 +111,17 @@ class MiniyoloLoss(tf.keras.losses.Loss):
             + class_loss
         )
 
-        # TODO -- Remove maybe, debug only
-        tf.print(
-            " - COORD Loss: ",
-            coord_loss,
-            " - CONF OBJ Loss: ",
-            conf_obj_loss,
-            " - CONF NOOBJ Loss: ",
-            conf_noobj_loss,
-            " - CLASS Loss: ",
-            class_loss,
-        )
+        # Debug only
+        # tf.print(
+        #     " - COORD Loss: ",
+        #     coord_loss,
+        #     " - CONF OBJ Loss: ",
+        #     conf_obj_loss,
+        #     " - CONF NOOBJ Loss: ",
+        #     conf_noobj_loss,
+        #     " - CLASS Loss: ",
+        #     class_loss,
+        # )
 
         return total_loss / batch_size
 
@@ -149,12 +157,12 @@ class MiniyoloLoss(tf.keras.losses.Loss):
 
     def _iou(self, box1, box2):
         """Calculates the Intersection Over Union of 2 given boxes after the boxes are decoded to a x1, y1, x2, y2 format, which outputs a
-        tensor containing how close the boxes match between them. IOU funtion divides the area of intersection between the 2 boxes
-        with the union of them theyr area.
+        tensor containing how close the boxes match between them. IOU function divides the area of intersection between the 2 boxes
+        with the union of their area.
 
         Args:
-            box1 (Tensor): First box in x1, y1, x2 and y2 format wich rappresent the normalized corner of the box relative to the image.
-            box2 (Tensor): Second box in x1, y1, x2 and y2 format wich rappresent the normalized corner of the box relative to the image.
+            box1 (Tensor): First box in x1, y1, x2 and y2 format which represent the normalized corner of the box relative to the image.
+            box2 (Tensor): Second box in x1, y1, x2 and y2 format which represent the normalized corner of the box relative to the image.
 
         Returns:
             Result Tensor: Tensor containing the calculated IOU, 1e-6 used to avoid division by 0.
