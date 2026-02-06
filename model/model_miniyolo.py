@@ -39,7 +39,7 @@ class MiniyoloModel(Model):
         self.output_channels = B * 5 + C
 
         # FOR DENSE HEAD
-        self.output_size = S * S * (B * 5 + C)
+        # self.output_size = S * S * (B * 5 + C)
 
         leaky_layer = LeakyReLU(0.1)
         self.conv1 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
