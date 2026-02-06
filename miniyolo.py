@@ -1,6 +1,6 @@
 import os
 
-# Removes tf logging
+# Removes TF logging
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import tensorflow as tf
@@ -14,16 +14,7 @@ from model import (
     MiniyoloLoss,
 )
 
-# TODO -- NEXT STEPS:
-# LOSS AND METRICS FUNCTIONS OR JUST LOSS PROBABLY
-# ADD IMAGE AUGMENTATION LAYERS
-# TOO MANY RESIZES: PREPROCESSING+MODEL MAYBE SEE WHICH ONE TO KEEP CONSIDERING MICROC CAMERA OR ASSUME PERFECT INPUT IMAGE SIZE
-# See if you want to add: shuffle, config, play with % ds sizes | validation set is left for inference see %s
-# CHANGE DOCSTRING SBC , S IS NOT NECESSARILY PIXEL WISE BUT JUST VIRTUAL DIVISION AND B DESCRIPTION IS DEFINITELY NOT ACCURATE
-
-# CONSIDERATIONS FOR INFERENCE: IMAGES IN DATASET ARE RESIZE TO IMG_SIZE DURING PREPROCESSING, SO INFERENCE
-# MIGHT BE WEIRD DEPENDING ON IMAGE SIZE TODO LATER WHEN TESTING INFERENCE
-
+# ------------------------------
 
 # WORKFLOW:
 # CONFIGURATION
@@ -33,7 +24,7 @@ from model import (
 # 4. MODEL COMPILATION
 # 5. MODEL TRAINING AND SAVING
 
-# ------------------------------------------------------------------------------
+# ------------------------------
 
 # --- CONFIGURATION START ---
 
@@ -46,7 +37,6 @@ DATA_DIR_IMAGES = "./data/images"
 DATA_DIR_ANNOTATIONS = "./data/annotations"
 SAVE_DIR = "./trained"
 
-# TODO -- Maybe download and move to "images" "annotations" directories but yeah idk maybe not useful for this project
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # Dataset configs

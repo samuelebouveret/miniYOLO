@@ -166,7 +166,7 @@ def miniyolo_load_example(
 
     image = tf.image.decode_jpeg(tf.io.read_file(image_path), channels=3)
     image = tf.image.resize(image, (image_height, image_width))
-    image = tf.image.convert_image_dtype(image, tf.float32)
+    image = image / 255.0
 
     labels, bboxes = tf.py_function(
         func=lambda x, y, z: _parse_dataset_xml(x.numpy(), y, z.numpy()),
@@ -315,5 +315,7 @@ def miniyolo_saving_callback(dir_path):
         keras.callbacks.ModelCheckpointype: Returns the model.
     """
 
-    path = os.path.join(dir_path, "trained-model-{epoch:02d}-{loss:.3f}.keras")
-    return ModelCheckpoint(filepath=path, monitor="loss", save_best_only=True)
+    path = os.path.join(dir_path, "trained-model-{epoch:02d}-{val_loss:.3f}.keras")
+    return ModelCheckpoint(
+        filepath=path, monitor="loss", save_best_only=True, mode="min", verbose=1
+    )
