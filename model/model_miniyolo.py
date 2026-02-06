@@ -36,7 +36,11 @@ class MiniyoloModel(Model):
         self.S = S
         self.B = B
         self.C = C
+        self.output_channels = B * 5 + C
+
+        # FOR DENSE HEAD
         self.output_size = S * S * (B * 5 + C)
+
         leaky_layer = LeakyReLU(0.1)
         self.conv1 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
         self.conv2 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
@@ -58,9 +62,14 @@ class MiniyoloModel(Model):
         self.conv10 = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")
         self.pool5 = MaxPooling2D(pool_size=(2, 2), strides=2)
 
-        self.flatten = Flatten()
-        self.fc1 = Dense(256, activation=leaky_layer)
-        self.fc2 = Dense(self.output_size)
+        # DENSE HEAD
+        # self.flatten = Flatten()
+        # self.fc1 = Dense(256, activation=leaky_layer)
+        # self.fc2 = Dense(self.output_size)
+
+        # CONVVOLUTIONAL HEAD
+        self.conv11 = Conv2D(256, (3, 3), activation=leaky_layer, padding="same")
+        self.conv_out = Conv2D(self.output_channels, (1, 1), padding="same")
 
     def call(self, inputs):
         """Define the forward propagation of the model.
@@ -91,9 +100,15 @@ class MiniyoloModel(Model):
         x = self.conv10(x)
         x = self.pool5(x)
 
-        x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.fc2(x)
+        # DENSE HEAD
+        # x = self.flatten(x)
+        # x = self.fc1(x)
+        # x = self.fc2(x)
+
+        # CONVOLUTIONAL HEAD
+        x = self.conv11(x)
+        x = self.conv_out(x)
+        x = tf.image.resize(x, (self.S, self.S), method="bilinear")
 
         y_pred = tf.reshape(x, (-1, self.S, self.S, self.B * 5 + self.C))
 
