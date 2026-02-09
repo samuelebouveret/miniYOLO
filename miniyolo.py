@@ -5,12 +5,12 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import tensorflow as tf
 
-from keras.layers import Input
 from model import (
-    MiniyoloModel,
+    build_model,
     miniyolo_load_example,
     miniyolo_optimizer,
-    miniyolo_saving_callback,
+    miniyolo_model_callback,
+    miniyolo_weights_callback,
     MiniyoloLoss,
 )
 
@@ -23,57 +23,33 @@ from model import (
 # 3. MODEL INITIALIZATION
 # 4. MODEL COMPILATION
 # 5. MODEL TRAINING AND SAVING
+# 6. EXPORT FINAL MODEL: for STM pipeline (needs a purely functional model)
 
 # ------------------------------
 
 # --- CONFIGURATION START ---
 
-# TODO -- DEBUG MODE TO RUN EAGERLY -- TESTING ONLY
-# tf.data.experimental.enable_debug_mode()
-# tf.config.run_functions_eagerly(True)
-
 # Generic configs
 DATA_DIR_IMAGES = "./data/images"
 DATA_DIR_ANNOTATIONS = "./data/annotations"
-SAVE_DIR = "./trained"
+BASE_DIR = "./trained"
+MODEL_DIR = os.path.join(BASE_DIR, "models")
+WEIGHTS_DIR = os.path.join(BASE_DIR, "weights")
 
-os.makedirs(SAVE_DIR, exist_ok=True)
+os.makedirs(BASE_DIR, exist_ok=True)
+os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
 # Dataset configs
-TRAIN_VAL_RATIO = 0.9
+TRAIN_VAL_RATIO = 0.1
 
 # Model configs
-"""
-ALL_CLASSES = [
-    "aeroplane",
-    "bicycle",
-    "bird",
-    "boat",
-    "bottle",
-    "bus",
-    "car",
-    "cat",
-    "chair",
-    "cow",
-    "diningtable",
-    "dog",
-    "horse",
-    "motorbike",
-    "person",
-    "pottedplant",
-    "sheep",
-    "sofa",
-    "train",
-    "tvmonitor",
-]
-"""
-
 SELECTED_CLASSES = ["chair", "car", "person"]
-C = len(SELECTED_CLASSES)
 B = 2
 S = 2
+C = len(SELECTED_CLASSES)
 MAX_OBJECTS = 3
-IMG_SIZE = (224, 224)
+IMG_SIZE = (88, 88)
 
 # Optimizer configs
 LEARNING_RATE = 1e-4
@@ -122,13 +98,9 @@ def run_training():
         num_parallel_calls=tf.data.AUTOTUNE,
     )
 
-    # # TODO -- Debugging only
-    # for image, target in dataset:
-    #     print(f"LABEL -> {type(target)} -- TARGET -> {target}")
-
     train_size = int(len(dataset) * TRAIN_VAL_RATIO)
     train_ds = dataset.take(train_size)
-    validation_ds = dataset.skip(train_size)
+    validation_ds = dataset.skip(train_size).take(10)
 
     print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
     print(f"TRAINING dataset image count: {len(train_ds)}")
@@ -141,9 +113,7 @@ def run_training():
     print(f"Batches per epoch: {len(train_ds)}")
 
     # 3. MODEL INITIALIZATION
-    input_layer = Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
-    model = MiniyoloModel(S, B, C)
-    output = model(input_layer)
+    model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
     model.summary()
 
     # 4. MODEL COMPILATION
@@ -156,14 +126,20 @@ def run_training():
     )
 
     # 5. MODEL TRAINING AND SAVING
-    callback = miniyolo_saving_callback(SAVE_DIR)
+    model_callback = miniyolo_model_callback(MODEL_DIR)
+    weights_callback = miniyolo_weights_callback(WEIGHTS_DIR)
 
     model.fit(
         train_ds,
         validation_data=validation_ds,
         epochs=EPOCH_NUM,
-        callbacks=callback,
+        callbacks=[model_callback, weights_callback],
     )
+
+    # 6. EXPORT FINAL MODEL: for STM pipeline
+    export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
+    export_model.load_weights(os.path.join(WEIGHTS_DIR, "final.weights.h5"))
+    export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
 
 
 if __name__ == "__main__":

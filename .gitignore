@@ -8,4 +8,3 @@ data-temp/
 *.ipynb
 evaluate.py
 eval_img/
-stm_converter.py

@@ -1,13 +1,15 @@
 """This file contains the model definition and related functions for preprocessing and training."""
 
 import os
-from keras import Model
+from keras import Model, Input
 from keras.layers import (
     Conv2D,
     MaxPooling2D,
-    Flatten,
-    Dense,
     LeakyReLU,
+    Reshape,
+    Concatenate,
+    Activation,
+    Resizing,
 )
 
 from keras.optimizers import SGD
@@ -18,120 +20,64 @@ import numpy as np
 import xml.etree.ElementTree as ET
 
 
-# TODO -- CHANGE HEAD LATER FOR BETTER MEMORY (TOO MANY PARAMETERS NOW) OR REDUCE DENSE FILTER
-# TODO -- Maybe add param leaky
-class MiniyoloModel(Model):
-    """Defines the MiniYOLO model overriding __init__ and call functions as in Keras documentation."""
+def build_model(S, B, C, input_shape):
+    """Builds the MiniYOLO model using the Functional API.
 
-    def __init__(self, S, B, C):
-        """Creates the model structure.
+    Args:
+        S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
+        B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
+        C (int): Number of classes recognizable by the model.
+        input_shape (tuple): Input image shape as (height, width, channels).
 
-        Args:
-            S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-            B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
-            C (int): Number of classes recognizable by the model.
-        """
+    Returns:
+        keras.Model: Functional Miniyolo model.
+    """
 
-        super().__init__()
-        self.S = S
-        self.B = B
-        self.C = C
-        self.output_channels = B * 5 + C
+    output_channels = B * 5 + C
+    leaky_layer = LeakyReLU(0.1)
 
-        # FOR DENSE HEAD
-        # self.output_size = S * S * (B * 5 + C)
+    inputs = Input(shape=input_shape, name="image")
 
-        leaky_layer = LeakyReLU(0.1)
-        self.conv1 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
-        self.conv2 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
-        self.pool1 = MaxPooling2D(pool_size=(2, 2), strides=2)
+    x = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")(inputs)
+    x = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = MaxPooling2D(pool_size=(2, 2), strides=2)(x)
 
-        self.conv3 = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")
-        self.conv4 = Conv2D(32, (3, 3), activation=leaky_layer, padding="same")
-        self.pool2 = MaxPooling2D(pool_size=(2, 2), strides=2)
+    x = Conv2D(16, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = Conv2D(32, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = MaxPooling2D(pool_size=(2, 2), strides=2)(x)
 
-        self.conv5 = Conv2D(32, (3, 3), activation=leaky_layer, padding="same")
-        self.conv6 = Conv2D(64, (3, 3), activation=leaky_layer, padding="same")
-        self.pool3 = MaxPooling2D(pool_size=(2, 2), strides=2)
+    x = Conv2D(32, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = Conv2D(64, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = MaxPooling2D(pool_size=(2, 2), strides=2)(x)
 
-        self.conv7 = Conv2D(64, (3, 3), activation=leaky_layer, padding="same")
-        self.conv8 = Conv2D(64, (3, 3), activation=leaky_layer, padding="same")
-        self.pool4 = MaxPooling2D(pool_size=(2, 2), strides=2)
+    x = Conv2D(64, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = Conv2D(64, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = MaxPooling2D(pool_size=(2, 2), strides=2)(x)
 
-        self.conv9 = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")
-        self.conv10 = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")
-        self.pool5 = MaxPooling2D(pool_size=(2, 2), strides=2)
+    x = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = Conv2D(128, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = MaxPooling2D(pool_size=(2, 2), strides=2)(x)
 
-        # DENSE HEAD
-        # self.flatten = Flatten()
-        # self.fc1 = Dense(256, activation=leaky_layer)
-        # self.fc2 = Dense(self.output_size)
+    x = Conv2D(256, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = Conv2D(output_channels, (1, 1), padding="same")(x)
+    x = Resizing(S, S, interpolation="bilinear")(x)
 
-        # CONVVOLUTIONAL HEAD
-        self.conv11 = Conv2D(256, (3, 3), activation=leaky_layer, padding="same")
-        self.conv_out = Conv2D(self.output_channels, (1, 1), padding="same")
+    y_pred = x
 
-    def call(self, inputs):
-        """Define the forward propagation of the model.
+    pred_boxes = y_pred[..., : B * 5]
+    pred_boxes = Reshape((S, S, B, 5))(pred_boxes)
 
-        Args:
-            inputs (keras.layers.Input): Input layer corresponding to the image input.
+    pred_xy = Activation("sigmoid")(pred_boxes[..., 0:2])
+    pred_wh = Activation("sigmoid")(pred_boxes[..., 2:4])
+    pred_conf = Activation("sigmoid")(pred_boxes[..., 4:5])
+    pred_boxes = Concatenate(axis=-1)([pred_xy, pred_wh, pred_conf])
 
-        Returns:
-            Tensor: Reshaped output YOLOv1 tensor -> (S,S,(B*5+C)).
-        """
+    pred_classes = y_pred[..., B * 5 :]
 
-        x = self.conv1(inputs)
-        x = self.conv2(x)
-        x = self.pool1(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.pool2(x)
+    pred_boxes_flat = Reshape((S, S, B * 5))(pred_boxes)
+    y_pred_safe = Concatenate(axis=-1)([pred_boxes_flat, pred_classes])
 
-        x = self.conv5(x)
-        x = self.conv6(x)
-        x = self.pool3(x)
-
-        x = self.conv7(x)
-        x = self.conv8(x)
-        x = self.pool4(x)
-
-        x = self.conv9(x)
-        x = self.conv10(x)
-        x = self.pool5(x)
-
-        # DENSE HEAD
-        # x = self.flatten(x)
-        # x = self.fc1(x)
-        # x = self.fc2(x)
-
-        # CONVOLUTIONAL HEAD
-        x = self.conv11(x)
-        x = self.conv_out(x)
-        x = tf.image.resize(x, (self.S, self.S), method="bilinear")
-
-        y_pred = tf.reshape(x, (-1, self.S, self.S, self.B * 5 + self.C))
-
-        pred_boxes = y_pred[..., : self.B * 5]
-        pred_boxes = tf.reshape(pred_boxes, (-1, self.S, self.S, self.B, 5))
-
-        pred_boxes = tf.concat(
-            [
-                tf.sigmoid(pred_boxes[..., 0:2]),
-                tf.sigmoid(pred_boxes[..., 2:4]),
-                tf.sigmoid(pred_boxes[..., 4:5]),
-            ],
-            axis=-1,
-        )
-
-        pred_classes = y_pred[..., self.B * 5 :]
-
-        y_pred_safe = tf.concat(
-            [tf.reshape(pred_boxes, (-1, self.S, self.S, self.B * 5)), pred_classes],
-            axis=-1,
-        )
-
-        return y_pred_safe
+    return Model(inputs=inputs, outputs=y_pred_safe, name="Miniyolo")
 
 
 def miniyolo_load_example(
@@ -144,7 +90,6 @@ def miniyolo_load_example(
     C,
     image_width,
     image_height,
-    training=False,
 ):
     """Preprocesses each image and prepares the YOLOv1 (S,S,(B*5+C)) target tensor and image for model training.
 
@@ -305,17 +250,38 @@ def miniyolo_optimizer(lr, mo, wd):
     return SGD(learning_rate=lr, momentum=mo, weight_decay=wd)
 
 
-def miniyolo_saving_callback(dir_path):
-    """Callback that saves the model weights and configuration on model improvements after each epoch.
+def miniyolo_model_callback(dir_path):
+    """Callback that saves the model model and configuration on improvements after each epoch.
 
     Args:
         dir_path (str): Path to the saving directory.
 
     Returns:
-        keras.callbacks.ModelCheckpointype: Returns the model.
+        keras.callbacks.ModelCheckpoint: Returns the callback.
     """
 
     path = os.path.join(dir_path, "trained-model-{epoch:02d}-{val_loss:.3f}.keras")
     return ModelCheckpoint(
         filepath=path, monitor="loss", save_best_only=True, mode="min", verbose=1
+    )
+
+
+def miniyolo_weights_callback(dir_path):
+    """Callback that saves the model weights only on model improvements after each epoch.
+
+    Args:
+        dir_path (str): Path to the saving directory.
+
+    Returns:
+        keras.callbacks.ModelCheckpointype: Returns the callback.
+    """
+
+    path = os.path.join(dir_path, "final.weights.h5")
+    return ModelCheckpoint(
+        filepath=path,
+        monitor="val_loss",
+        save_best_only=True,
+        save_weights_only=True,
+        mode="min",
+        verbose=1,
     )
