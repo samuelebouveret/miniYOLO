@@ -79,12 +79,17 @@ class MiniyoloLoss(tf.keras.losses.Loss):
 
         # Coordinate loss
         true_xywh = tf.tile(true_boxes_single, [1, 1, 1, self.B, 1])
+        pred_xy = pred_boxes[..., 0:2]
+        true_xy = true_xywh[..., 0:2]
+        pred_wh = pred_boxes[..., 2:4]
+        true_wh = true_xywh[..., 2:4]
+
+        pred_wh_sqrt = tf.sqrt(tf.maximum(pred_wh, 1e-6))
+        true_wh_sqrt = tf.sqrt(tf.maximum(true_wh, 1e-6))
+
         coord_loss = tf.reduce_sum(
             responsible
-            * (
-                tf.square(pred_boxes[..., 0:2] - true_xywh[..., 0:2])
-                + tf.square(pred_boxes[..., 2:4] - true_xywh[..., 2:4])
-            )
+            * (tf.square(pred_xy - true_xy) + tf.square(pred_wh_sqrt - true_wh_sqrt))
         )
 
         # Confidence loss (obj) uses best IoU target

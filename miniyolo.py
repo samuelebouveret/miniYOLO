@@ -41,7 +41,7 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
 
 # Dataset configs
-TRAIN_VAL_RATIO = 0.1
+TRAIN_VAL_RATIO = 0.8
 
 # Model configs
 SELECTED_CLASSES = ["chair", "car", "person"]
@@ -58,7 +58,7 @@ WEIGHT_DECAY = 0.0005
 
 # Training configs
 EPOCH_NUM = 1
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 
 # Loss function configs
 LAMBDA_COORD = 5.0
@@ -100,7 +100,7 @@ def run_training():
 
     train_size = int(len(dataset) * TRAIN_VAL_RATIO)
     train_ds = dataset.take(train_size)
-    validation_ds = dataset.skip(train_size).take(10)
+    validation_ds = dataset.skip(train_size)
 
     print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
     print(f"TRAINING dataset image count: {len(train_ds)}")
