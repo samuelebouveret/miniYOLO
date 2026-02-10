@@ -49,7 +49,7 @@ B = 2
 S = 2
 C = len(SELECTED_CLASSES)
 MAX_OBJECTS = 3
-IMG_SIZE = (224, 224)
+IMG_SIZE = (88, 88)
 
 # Optimizer configs
 LEARNING_RATE = 1e-4
@@ -140,7 +140,12 @@ def run_training():
 
         # 6. EXPORT FINAL MODEL
         export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
-        export_model.load_weights(os.path.join(WEIGHTS_DIR, "final.weights.h5"))
+        export_model.load_weights(
+            os.path.join(
+                WEIGHTS_DIR,
+                input("Weights filename without extension: ") + ".weights.h5",
+            )
+        )
         export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
 
 

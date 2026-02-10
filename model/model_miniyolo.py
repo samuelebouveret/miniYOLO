@@ -260,7 +260,10 @@ def miniyolo_model_callback(dir_path):
         keras.callbacks.ModelCheckpoint: Returns the callback.
     """
 
-    path = os.path.join(dir_path, "trained-model-{epoch:02d}-{val_loss:.3f}.keras")
+    path = os.path.join(
+        dir_path,
+        "trained-model-epoch:{epoch:03d}-val_loss{val_loss:.3f}-loss{loss:.3f}.keras",
+    )
     return ModelCheckpoint(
         filepath=path, monitor="val_loss", save_best_only=False, verbose=1
     )
@@ -276,7 +279,10 @@ def miniyolo_weights_callback(dir_path):
         keras.callbacks.ModelCheckpointype: Returns the callback.
     """
 
-    path = os.path.join(dir_path, "final.weights.h5")
+    path = os.path.join(
+        dir_path,
+        "final-weights-epoch:{epoch:03d}-val_loss{val_loss:.3f}-loss{loss:.3f}.weights.h5",
+    )
     return ModelCheckpoint(
         filepath=path,
         monitor="val_loss",
