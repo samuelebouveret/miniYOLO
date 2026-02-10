@@ -49,7 +49,7 @@ B = 2
 S = 2
 C = len(SELECTED_CLASSES)
 MAX_OBJECTS = 3
-IMG_SIZE = (88, 88)
+IMG_SIZE = (224, 224)
 
 # Optimizer configs
 LEARNING_RATE = 1e-4
@@ -57,7 +57,7 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 
 # Training configs
-EPOCH_NUM = 1
+EPOCH_NUM = 200
 BATCH_SIZE = 64
 
 # Loss function configs
@@ -129,17 +129,19 @@ def run_training():
     model_callback = miniyolo_model_callback(MODEL_DIR)
     weights_callback = miniyolo_weights_callback(WEIGHTS_DIR)
 
-    model.fit(
-        train_ds,
-        validation_data=validation_ds,
-        epochs=EPOCH_NUM,
-        callbacks=[model_callback, weights_callback],
-    )
+    try:
+        model.fit(
+            train_ds,
+            validation_data=validation_ds,
+            epochs=EPOCH_NUM,
+            callbacks=[model_callback, weights_callback],
+        )
+    finally:
 
-    # 6. EXPORT FINAL MODEL: for STM pipeline
-    export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
-    export_model.load_weights(os.path.join(WEIGHTS_DIR, "final.weights.h5"))
-    export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
+        # 6. EXPORT FINAL MODEL
+        export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
+        export_model.load_weights(os.path.join(WEIGHTS_DIR, "final.weights.h5"))
+        export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
 
 
 if __name__ == "__main__":

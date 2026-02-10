@@ -262,7 +262,7 @@ def miniyolo_model_callback(dir_path):
 
     path = os.path.join(dir_path, "trained-model-{epoch:02d}-{val_loss:.3f}.keras")
     return ModelCheckpoint(
-        filepath=path, monitor="loss", save_best_only=True, mode="min", verbose=1
+        filepath=path, monitor="val_loss", save_best_only=False, verbose=1
     )
 
 
