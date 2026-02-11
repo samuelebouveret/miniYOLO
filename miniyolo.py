@@ -12,6 +12,7 @@ from model import (
     miniyolo_model_callback,
     miniyolo_weights_callback,
     MiniyoloLoss,
+    plot_training_history,
 )
 
 # ------------------------------
@@ -57,7 +58,7 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 
 # Training configs
-EPOCH_NUM = 200
+EPOCH_NUM = 5
 BATCH_SIZE = 64
 
 # Loss function configs
@@ -99,8 +100,8 @@ def run_training():
     )
 
     train_size = int(len(dataset) * TRAIN_VAL_RATIO)
-    train_ds = dataset.take(train_size)
-    validation_ds = dataset.skip(train_size)
+    train_ds = dataset.take(train_size).take(64)
+    validation_ds = dataset.skip(train_size).take(64)
 
     print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
     print(f"TRAINING dataset image count: {len(train_ds)}")
@@ -129,24 +130,28 @@ def run_training():
     model_callback = miniyolo_model_callback(MODEL_DIR)
     weights_callback = miniyolo_weights_callback(WEIGHTS_DIR)
 
+    history = None
     try:
-        model.fit(
+        history = model.fit(
             train_ds,
             validation_data=validation_ds,
             epochs=EPOCH_NUM,
             callbacks=[model_callback, weights_callback],
         )
     finally:
-
-        # 6. EXPORT FINAL MODEL
-        export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
-        export_model.load_weights(
-            os.path.join(
-                WEIGHTS_DIR,
-                input("Weights filename without extension: ") + ".weights.h5",
-            )
-        )
-        export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
+        print("ciao")
+        if history is not None:
+            plot_training_history(history, BASE_DIR)
+        # # 6. EXPORT FINAL MODEL
+        # export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
+        # export_model.load_weights(
+        #     os.path.join(
+        #         WEIGHTS_DIR,
+        #         input("Weights filename without extension: ") + ".weights.h5",
+        #     )
+        # )
+        # export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
+        pass
 
 
 if __name__ == "__main__":

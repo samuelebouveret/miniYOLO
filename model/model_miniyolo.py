@@ -10,7 +10,10 @@ from keras.layers import (
     Concatenate,
     Activation,
     Resizing,
+    Softmax,
 )
+
+import matplotlib.pyplot as plt
 
 from keras.optimizers import SGD
 from keras.callbacks import ModelCheckpoint
@@ -68,11 +71,11 @@ def build_model(S, B, C, input_shape):
     pred_boxes = Reshape((S, S, B, 5))(pred_boxes)
 
     pred_xy = Activation("sigmoid")(pred_boxes[..., 0:2])
-    pred_wh = Activation("sigmoid")(pred_boxes[..., 2:4])
+    pred_wh = pred_boxes[..., 2:4]
     pred_conf = Activation("sigmoid")(pred_boxes[..., 4:5])
     pred_boxes = Concatenate(axis=-1)([pred_xy, pred_wh, pred_conf])
 
-    pred_classes = y_pred[..., B * 5 :]
+    pred_classes = Softmax(axis=-1)(y_pred[..., B * 5 :])
 
     pred_boxes_flat = Reshape((S, S, B * 5))(pred_boxes)
     y_pred_safe = Concatenate(axis=-1)([pred_boxes_flat, pred_classes])
@@ -227,7 +230,10 @@ def _set_target(labels, bboxes, S, B, C):
             y_center_offset = y_center * S - cell_y
 
             if target[cell_y, cell_x, 4] == 1:
-                continue
+                curr_w = target[cell_y, cell_x, 2]
+                curr_h = target[cell_y, cell_x, 3]
+                if (w * h) <= (curr_w * curr_h):
+                    continue
 
             target[cell_y, cell_x, 0:5] = [x_center_offset, y_center_offset, w, h, 1.0]
             target[cell_y, cell_x, B * 5 + (label - 1)] = 1.0
@@ -291,3 +297,28 @@ def miniyolo_weights_callback(dir_path):
         mode="min",
         verbose=1,
     )
+
+
+def plot_training_history(history, out_dir):
+    loss = history.history.get("loss", [])
+    val_loss = history.history.get("val_loss", [])
+
+    if not loss:
+        print("No loss history to plot.")
+        return
+
+    epochs = range(1, len(loss) + 1)
+    plt.figure(figsize=(6, 4))
+    plt.plot(epochs, loss, label="loss")
+    if val_loss:
+        plt.plot(epochs, val_loss, label="val_loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training and Validation Loss")
+    plt.legend()
+    plt.tight_layout()
+
+    out_path = os.path.join(out_dir, "loss_curve.png")
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+    print(f"Saved loss plot to: {out_path}")

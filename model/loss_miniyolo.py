@@ -81,11 +81,11 @@ class MiniyoloLoss(tf.keras.losses.Loss):
         true_xywh = tf.tile(true_boxes_single, [1, 1, 1, self.B, 1])
         pred_xy = pred_boxes[..., 0:2]
         true_xy = true_xywh[..., 0:2]
-        pred_wh = pred_boxes[..., 2:4]
-        true_wh = true_xywh[..., 2:4]
+        pred_wh = tf.maximum(pred_boxes[..., 2:4], 1e-6)
+        true_wh = tf.maximum(true_xywh[..., 2:4], 1e-6)
 
-        pred_wh_sqrt = tf.sqrt(tf.maximum(pred_wh, 1e-6))
-        true_wh_sqrt = tf.sqrt(tf.maximum(true_wh, 1e-6))
+        pred_wh_sqrt = tf.sqrt(pred_wh)
+        true_wh_sqrt = tf.sqrt(true_wh)
 
         coord_loss = tf.reduce_sum(
             responsible
