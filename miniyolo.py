@@ -100,8 +100,8 @@ def run_training():
     )
 
     train_size = int(len(dataset) * TRAIN_VAL_RATIO)
-    train_ds = dataset.take(train_size).take(64)
-    validation_ds = dataset.skip(train_size).take(64)
+    train_ds = dataset.take(train_size)
+    validation_ds = dataset.skip(train_size)
 
     print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
     print(f"TRAINING dataset image count: {len(train_ds)}")
@@ -139,7 +139,6 @@ def run_training():
             callbacks=[model_callback, weights_callback],
         )
     finally:
-        print("ciao")
         if history is not None:
             plot_training_history(history, BASE_DIR)
         # # 6. EXPORT FINAL MODEL
@@ -151,7 +150,6 @@ def run_training():
         #     )
         # )
         # export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
-        pass
 
 
 if __name__ == "__main__":

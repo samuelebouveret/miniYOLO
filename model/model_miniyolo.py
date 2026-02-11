@@ -71,7 +71,7 @@ def build_model(S, B, C, input_shape):
     pred_boxes = Reshape((S, S, B, 5))(pred_boxes)
 
     pred_xy = Activation("sigmoid")(pred_boxes[..., 0:2])
-    pred_wh = pred_boxes[..., 2:4]
+    pred_wh = Activation("relu")(pred_boxes[..., 2:4])
     pred_conf = Activation("sigmoid")(pred_boxes[..., 4:5])
     pred_boxes = Concatenate(axis=-1)([pred_xy, pred_wh, pred_conf])
 
