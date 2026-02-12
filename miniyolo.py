@@ -58,7 +58,7 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 
 # Training configs
-EPOCH_NUM = 5
+EPOCH_NUM = 200
 BATCH_SIZE = 64
 
 # Loss function configs
@@ -84,7 +84,12 @@ def run_training():
     dataset = tf.data.Dataset.from_tensor_slices((image_files, xml_files))
 
     # 2. DATASET PREPROCESSING
-    dataset = dataset.map(
+    train_size = int(len(dataset) * TRAIN_VAL_RATIO)
+    train_paths = dataset.take(train_size)
+    val_paths = dataset.skip(train_size)
+
+    # Training set with YOLOv1 augmentation
+    train_ds = train_paths.map(
         lambda image_path, xml_path: miniyolo_load_example(
             image_path,
             xml_path,
@@ -95,13 +100,27 @@ def run_training():
             C,
             IMG_SIZE[0],
             IMG_SIZE[1],
+            augment=True,
         ),
         num_parallel_calls=tf.data.AUTOTUNE,
     )
 
-    train_size = int(len(dataset) * TRAIN_VAL_RATIO)
-    train_ds = dataset.take(train_size)
-    validation_ds = dataset.skip(train_size)
+    # Validation set without augmentation
+    validation_ds = val_paths.map(
+        lambda image_path, xml_path: miniyolo_load_example(
+            image_path,
+            xml_path,
+            MAX_OBJECTS,
+            SELECTED_CLASSES,
+            S,
+            B,
+            C,
+            IMG_SIZE[0],
+            IMG_SIZE[1],
+            augment=False,
+        ),
+        num_parallel_calls=tf.data.AUTOTUNE,
+    )
 
     print(f"TOTAL IMAGES count: {len(train_ds)+len(validation_ds)}")
     print(f"TRAINING dataset image count: {len(train_ds)}")

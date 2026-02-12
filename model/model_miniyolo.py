@@ -13,6 +13,7 @@ from keras.layers import (
     Softmax,
 )
 
+import cv2
 import matplotlib.pyplot as plt
 
 from keras.optimizers import SGD
@@ -93,6 +94,7 @@ def miniyolo_load_example(
     C,
     image_width,
     image_height,
+    augment=False,
 ):
     """Preprocesses each image and prepares the YOLOv1 (S,S,(B*5+C)) target tensor and image for model training.
 
@@ -106,6 +108,7 @@ def miniyolo_load_example(
         C (int): Number of classes recognizable by the model.
         image_width (int): Number of pixels to resize the input image width.
         image_height (int): Number of pixels to resize the input image height.
+        augment (bool): Whether to apply YOLOv1-style data augmentation (training only).
 
     Returns:
         Resized image Tensor: Model ready image tensor.
@@ -125,6 +128,17 @@ def miniyolo_load_example(
     labels.set_shape([max_objects])
     bboxes.set_shape([max_objects, 4])
 
+    if augment:
+        image, bboxes = tf.py_function(
+            func=lambda img, bbs, lbls: _augment_yolov1(
+                img.numpy(), bbs.numpy(), lbls.numpy()
+            ),
+            inp=[image, bboxes, labels],
+            Tout=[tf.float32, tf.float32],
+        )
+        image.set_shape([image_height, image_width, 3])
+        bboxes.set_shape([max_objects, 4])
+
     target = tf.py_function(
         func=lambda x, y: _set_target(x.numpy(), y.numpy(), S, B, C),
         inp=[labels, bboxes],
@@ -135,6 +149,81 @@ def miniyolo_load_example(
     image.set_shape([image_height, image_width, 3])
 
     return image, target
+
+
+def _augment_yolov1(
+    image, bboxes, labels, max_translate=0.2, max_scale_delta=0.2, max_hsv_factor=1.5
+):
+    """Applies YOLOv1-style data augmentation: random scaling, translation, and HSV jitter.
+
+    As described in the YOLOv1 paper: random scaling and translations of up to 20%
+    of the original image size, and random exposure and saturation adjustment up to
+    a factor of 1.5 in HSV color space.
+
+    Args:
+        image (np.ndarray): Image array (H, W, 3) in [0, 1].
+        bboxes (np.ndarray): Bounding boxes (max_objects, 4) as [xmin, ymin, xmax, ymax] normalized.
+        labels (np.ndarray): Labels array (max_objects,).
+        max_translate (float): Maximum translation as fraction of image size (default 0.2).
+        max_scale_delta (float): Maximum scale change as fraction (default 0.2, so scale in [0.8, 1.2]).
+        max_hsv_factor (float): Maximum multiplicative factor for exposure/saturation jitter (default 1.5).
+
+    Returns:
+        Augmented image and bboxes.
+    """
+
+    h, w = image.shape[:2]
+
+    # --- Random scale and translation ---
+    scale = 1.0 + np.random.uniform(-max_scale_delta, max_scale_delta)
+    tx = np.random.uniform(-max_translate, max_translate)
+    ty = np.random.uniform(-max_translate, max_translate)
+
+    # Scale bboxes around image center, then translate
+    new_bboxes = bboxes.copy()
+    for i in range(len(labels)):
+        if labels[i] == 0:
+            continue
+        xmin, ymin, xmax, ymax = bboxes[i]
+        cx = (xmin + xmax) / 2.0
+        cy = (ymin + ymax) / 2.0
+        bw = (xmax - xmin) * scale
+        bh = (ymax - ymin) * scale
+        cx = cx * scale + tx
+        cy = cy * scale + ty
+        new_bboxes[i] = [
+            np.clip(cx - bw / 2, 0.0, 1.0),
+            np.clip(cy - bh / 2, 0.0, 1.0),
+            np.clip(cx + bw / 2, 0.0, 1.0),
+            np.clip(cy + bh / 2, 0.0, 1.0),
+        ]
+
+    # Apply affine to image: scale + translate
+    M = np.array(
+        [
+            [scale, 0, tx * w],
+            [0, scale, ty * h],
+        ],
+        dtype=np.float32,
+    )
+    image = cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT_101)
+
+    # --- Random HSV jitter (exposure and saturation) ---
+    image_uint8 = np.clip(image * 255.0, 0, 255).astype(np.uint8)
+    hsv = cv2.cvtColor(image_uint8, cv2.COLOR_RGB2HSV).astype(np.float32)
+
+    # Saturation jitter
+    sat_factor = np.random.uniform(1.0 / max_hsv_factor, max_hsv_factor)
+    hsv[..., 1] = np.clip(hsv[..., 1] * sat_factor, 0, 255)
+
+    # Exposure (value) jitter
+    exp_factor = np.random.uniform(1.0 / max_hsv_factor, max_hsv_factor)
+    hsv[..., 2] = np.clip(hsv[..., 2] * exp_factor, 0, 255)
+
+    image_uint8 = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+    image = image_uint8.astype(np.float32) / 255.0
+
+    return image, new_bboxes
 
 
 def _parse_dataset_xml(xml_path, max_objects, selected_classes):
@@ -271,7 +360,7 @@ def miniyolo_model_callback(dir_path):
         "trained-model-epoch:{epoch:03d}-val_loss{val_loss:.3f}-loss{loss:.3f}.keras",
     )
     return ModelCheckpoint(
-        filepath=path, monitor="val_loss", save_best_only=False, verbose=1
+        filepath=path, monitor="val_loss", save_best_only=True, verbose=1
     )
 
 
