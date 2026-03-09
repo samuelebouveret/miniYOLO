@@ -4,7 +4,5 @@ data/
 venv
 data-temp/
 *.xml
-.ipynb_checkpoints
-*.ipynb
 evaluate.py
 eval_img/

@@ -11,7 +11,7 @@ class MiniyoloLoss(tf.keras.losses.Loss):
 
         Args:
             S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-            B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
+            B (int): Maximum number of boxes recognizable by the model for each cell.
             C (int): Number of classes recognizable by the model.
             lambda_coord (float): Hyperparameter that increases the loss from bounding box coordinate predictions.
             lambda_noobj (float): Hyperparameter that decreases the loss from confidence predictions for boxes that don't contain objects.

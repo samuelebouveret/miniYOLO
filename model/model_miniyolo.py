@@ -12,6 +12,7 @@ from keras.layers import (
     Resizing,
     Softmax,
 )
+from keras.layers import Dropout
 
 import cv2
 import matplotlib.pyplot as plt
@@ -29,7 +30,7 @@ def build_model(S, B, C, input_shape):
 
     Args:
         S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells pixel wise ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-        B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
+        B (int): Maximum number of boxes recognizable by the model for each cell.
         C (int): Number of classes recognizable by the model.
         input_shape (tuple): Input image shape as (height, width, channels).
 
@@ -63,6 +64,7 @@ def build_model(S, B, C, input_shape):
     x = MaxPooling2D(pool_size=(2, 2), strides=2)(x)
 
     x = Conv2D(256, (3, 3), activation=leaky_layer, padding="same")(x)
+    x = Dropout(0.5)(x)
     x = Conv2D(output_channels, (1, 1), padding="same")(x)
     x = Resizing(S, S, interpolation="bilinear")(x)
 
@@ -104,7 +106,7 @@ def miniyolo_load_example(
         max_objects (int): Maximum number of objects recognizable by the model inside the whole image.
         selected_classes (list(str)): List of classes that the model is trained for recognition.
         S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-        B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
+        B (int): Maximum number of boxes recognizable by the model for each cell.
         C (int): Number of classes recognizable by the model.
         image_width (int): Number of pixels to resize the input image width.
         image_height (int): Number of pixels to resize the input image height.
@@ -156,14 +158,10 @@ def _augment_yolov1(
 ):
     """Applies YOLOv1-style data augmentation: random scaling, translation, and HSV jitter.
 
-    As described in the YOLOv1 paper: random scaling and translations of up to 20%
-    of the original image size, and random exposure and saturation adjustment up to
-    a factor of 1.5 in HSV color space.
-
     Args:
-        image (np.ndarray): Image array (H, W, 3) in [0, 1].
-        bboxes (np.ndarray): Bounding boxes (max_objects, 4) as [xmin, ymin, xmax, ymax] normalized.
-        labels (np.ndarray): Labels array (max_objects,).
+        image (Tensor): Image array (H, W, 3) in [0, 1].
+        bboxes (Tensor): Bounding boxes (max_objects, 4) as [xmin, ymin, xmax, ymax] normalized.
+        labels (Tensor): Labels array (max_objects,).
         max_translate (float): Maximum translation as fraction of image size (default 0.2).
         max_scale_delta (float): Maximum scale change as fraction (default 0.2, so scale in [0.8, 1.2]).
         max_hsv_factor (float): Maximum multiplicative factor for exposure/saturation jitter (default 1.5).
@@ -174,7 +172,7 @@ def _augment_yolov1(
 
     h, w = image.shape[:2]
 
-    # --- Random scale and translation ---
+    # Random scale and translation
     scale = 1.0 + np.random.uniform(-max_scale_delta, max_scale_delta)
     tx = np.random.uniform(-max_translate, max_translate)
     ty = np.random.uniform(-max_translate, max_translate)
@@ -208,7 +206,7 @@ def _augment_yolov1(
     )
     image = cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT_101)
 
-    # --- Random HSV jitter (exposure and saturation) ---
+    # Random HSV jitter (exposure and saturation)
     image_uint8 = np.clip(image * 255.0, 0, 255).astype(np.uint8)
     hsv = cv2.cvtColor(image_uint8, cv2.COLOR_RGB2HSV).astype(np.float32)
 
@@ -291,7 +289,7 @@ def _set_target(labels, bboxes, S, B, C):
         labels (Tensor): Labels tensor from _parse_dataset_xml function
         bboxes (Tensor): Bboxes tensor from _parse_dataset_xml
         S (int): Number of division of the image (S² is the total number of cells). Ex. S=2 we divide the image in cells ([0,0],[0,1],[1,0],[1,1]), 4 cells total.
-        B (int): Maximum number of boxes recognizable by the model for each cell. Only one is actually filled for each image in the dataset.
+        B (int): Maximum number of boxes recognizable by the model for each cell.
         C (int): Number of classes recognizable by the model.
 
     Returns:
@@ -389,6 +387,12 @@ def miniyolo_weights_callback(dir_path):
 
 
 def plot_training_history(history, out_dir):
+    """Plots val_loss/loss graph.
+
+    Args:
+        history (History): History object returned by model.fit() containing the training history.
+        out_dir (Path): Image saving directory.
+    """
     loss = history.history.get("loss", [])
     val_loss = history.history.get("val_loss", [])
 
