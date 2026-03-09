@@ -24,7 +24,6 @@ from model import (
 # 3. MODEL INITIALIZATION
 # 4. MODEL COMPILATION
 # 5. MODEL TRAINING AND SAVING
-# 6. EXPORT FINAL MODEL: for STM pipeline (needs a purely functional model)
 
 # ------------------------------
 
@@ -58,7 +57,7 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 
 # Training configs
-EPOCH_NUM = 200
+EPOCH_NUM = 300
 BATCH_SIZE = 64
 
 # Loss function configs
@@ -160,15 +159,6 @@ def run_training():
     finally:
         if history is not None:
             plot_training_history(history, BASE_DIR)
-        # # 6. EXPORT FINAL MODEL
-        # export_model = build_model(S, B, C, input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
-        # export_model.load_weights(
-        #     os.path.join(
-        #         WEIGHTS_DIR,
-        #         input("Weights filename without extension: ") + ".weights.h5",
-        #     )
-        # )
-        # export_model.save(os.path.join(MODEL_DIR, "final-model.keras"))
 
 
 if __name__ == "__main__":

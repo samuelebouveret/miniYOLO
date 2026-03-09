@@ -4,5 +4,3 @@ data/
 venv
 data-temp/
 *.xml
-evaluate.py
-eval_img/
